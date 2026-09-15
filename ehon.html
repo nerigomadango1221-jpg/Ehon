@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="えほん">
+<meta name="theme-color" content="#dcebe6">
+<title>えほんのほんだな</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+:root{
+  --wall:#dcebe6;      /* 子ども部屋の壁 */
+  --wood:#c99a62;      /* 棚板 */
+  --wood-dark:#9c7040;
+  --ink:#2f3a56;       /* 文字・読書背景 */
+  --sun:#f5c542;       /* 主ボタン */
+  --pink:#ef8fa3;      /* 削除など */
+  --paper:#fffdf7;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html,body{
+  margin:0;height:100%;overflow:hidden;background:var(--wall);color:var(--ink);
+  font-family:"Hiragino Maru Gothic ProN","Hiragino Sans","Yu Gothic UI",system-ui,sans-serif;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
+  overscroll-behavior:none;touch-action:manipulation;
+}
+button{font:inherit;color:inherit}
+button:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.screen{position:fixed;inset:0}
+
+/* ---------- ほんだな ---------- */
+#shelf{
+  overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:calc(env(safe-area-inset-top) + 24px) calc(env(safe-area-inset-right) + 36px)
+          calc(env(safe-area-inset-bottom) + 48px) calc(env(safe-area-inset-left) + 36px);
+}
+.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;min-height:60px}
+.top h1{margin:0;font-size:34px;letter-spacing:.08em;display:flex;align-items:center;gap:14px}
+.top h1 .dots{display:flex;gap:6px}
+.top h1 .dots i{width:14px;height:14px;border-radius:50%;display:block}
+.top h1 .dots i:nth-child(1){background:var(--pink)}
+.top h1 .dots i:nth-child(2){background:var(--sun)}
+.top h1 .dots i:nth-child(3){background:#6fb3a6}
+.actions{display:flex;align-items:center;gap:12px}
+
+.pill{
+  appearance:none;border:0;border-radius:999px;padding:12px 22px;font-size:17px;font-weight:700;
+  background:var(--paper);box-shadow:0 2px 0 rgba(47,58,86,.15);cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;
+}
+.pill:active{transform:translateY(2px);box-shadow:none}
+.pill.primary{background:var(--sun)}
+.pill.big{font-size:22px;padding:18px 34px}
+.edit-only{display:none!important}
+.editing .edit-only{display:inline-flex!important}
+.editing p.edit-only{display:block!important}
+.editing #gearBtn{display:none}
+
+.round{
+  position:relative;appearance:none;border:0;width:56px;height:56px;border-radius:50%;
+  background:rgba(255,253,247,.7);cursor:pointer;display:grid;place-items:center;padding:0;
+}
+.round svg.ring{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+.round svg.ring circle{fill:none;stroke:var(--sun);stroke-width:5;stroke-linecap:round;
+  stroke-dasharray:157;stroke-dashoffset:157;transition:none}
+.round.holding svg.ring circle{stroke-dashoffset:0;transition:stroke-dashoffset var(--hold,1s) linear}
+.round svg.icon{width:28px;height:28px;stroke:var(--ink);stroke-width:2.6;fill:none;stroke-linecap:round;stroke-linejoin:round}
+
+.hint{margin:-12px 0 24px;font-size:15px;opacity:.75}
+.note{margin:-8px 0 28px;padding:12px 18px;border-radius:14px;background:var(--paper);
+  font-size:15px;line-height:1.6;border-left:6px solid var(--pink)}
+
+/* 棚：各段は本の下に木の板 */
+.grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+  column-gap:28px;row-gap:44px;
+}
+.book{display:flex;flex-direction:column;align-items:center}
+.cover{
+  appearance:none;border:0;padding:0;background:none;cursor:pointer;
+  width:100%;height:var(--cover-h,250px);display:flex;align-items:flex-end;justify-content:center;
+  transition:transform .15s ease-out;position:relative;z-index:1;
+}
+.cover:active{transform:scale(.93)}
+.frame{position:relative;display:block;max-width:88%;max-height:100%;line-height:0}
+.frame img{
+  max-width:100%;max-height:var(--cover-h,250px);display:block;background:#fff;
+  border-radius:4px 12px 12px 4px;
+  box-shadow:6px 6px 0 rgba(47,58,86,.18);
+}
+.frame::before{ /* 背表紙の影 */
+  content:"";position:absolute;left:0;top:0;bottom:0;width:10px;border-radius:4px 0 0 4px;
+  background:linear-gradient(90deg,rgba(0,0,0,.18),rgba(0,0,0,0));pointer-events:none;
+}
+.ledge{
+  width:112%;height:14px;margin-top:-2px;border-radius:4px;
+  background:linear-gradient(var(--wood) 0 60%,var(--wood-dark) 60% 100%);
+  box-shadow:0 6px 0 rgba(47,58,86,.08);
+}
+.title{margin-top:12px;font-size:15px;text-align:center;width:0;min-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.8}
+
+.tools{display:flex;gap:10px;margin-top:10px}
+.tool{appearance:none;border:0;width:44px;height:44px;border-radius:50%;background:var(--paper);
+  font-size:18px;font-weight:700;cursor:pointer;box-shadow:0 2px 0 rgba(47,58,86,.15)}
+.tool.del{background:var(--pink);color:#fff}
+.tool:disabled{opacity:.3}
+.editing .frame{animation:wiggle .5s ease-in-out infinite alternate}
+.editing .book:nth-child(even) .frame{animation-delay:-.25s}
+@keyframes wiggle{from{transform:rotate(-1.2deg)}to{transform:rotate(1.2deg)}}
+
+.empty{display:flex;flex-direction:column;align-items:center;text-align:center;padding-top:8vh;gap:10px}
+.empty p{margin:0;font-size:20px}
+.empty p.small{font-size:14px;opacity:.65;margin-top:8px}
+.empty-shelf{display:flex;align-items:flex-end;gap:10px;margin-bottom:22px}
+.empty-shelf i{display:block;width:34px;border-radius:3px 6px 6px 3px}
+.empty-shelf i:nth-child(1){height:90px;background:var(--pink)}
+.empty-shelf i:nth-child(2){height:120px;background:var(--sun)}
+.empty-shelf i:nth-child(3){height:76px;background:#6fb3a6;transform:rotate(12deg);transform-origin:bottom left;margin-left:4px}
+
+/* 横向きの本棚：横にスクロールする長い棚（段数は画面の高さで自動） */
+@media (orientation: landscape){
+  #shelf{overflow:hidden;display:flex;flex-direction:column;padding-bottom:calc(env(safe-area-inset-bottom) + 20px)}
+  #shelf .top{margin-bottom:18px}
+  #shelf .grid{
+    flex:1;min-height:0;
+    grid-auto-flow:column;grid-template-columns:none;grid-auto-columns:max-content;
+    column-gap:0;row-gap:24px;align-content:start;
+    overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;
+    scroll-snap-type:x proximity;overscroll-behavior-x:contain;
+    margin:0 calc(-36px - env(safe-area-inset-right)) 0 calc(-36px - env(safe-area-inset-left));
+    padding:0 calc(20px + env(safe-area-inset-right)) 0 calc(20px + env(safe-area-inset-left));
+  }
+  #shelf .grid:empty{display:none}
+  #shelf .book{padding:0 22px;scroll-snap-align:start;justify-content:flex-start}
+  #shelf .cover{width:auto}
+  #shelf .frame{max-width:none}
+  #shelf .frame img{max-width:calc(var(--cover-h,250px) * 1.5)}
+  #shelf .ledge{width:calc(100% + 44px);border-radius:0}
+  #shelf .book:first-child .ledge{border-radius:6px 0 0 6px}
+  #shelf .book:last-child .ledge{border-radius:0 6px 6px 0}
+  #shelf .empty{padding-top:2vh}
+}
+
+/* ---------- よむ画面 ---------- */
+#reader{background:var(--ink);touch-action:none;overflow:hidden}
+#stage{position:absolute;inset:0}
+#stage canvas{
+  position:absolute;left:50%;top:50%;
+  transform:translate(calc(-50% + var(--dx,0%)),-50%);
+  border-radius:8px;box-shadow:0 18px 50px rgba(0,0,0,.35);
+  transition:transform .34s cubic-bezier(.2,.8,.2,1),opacity .34s;
+}
+#stage canvas.noanim{transition:none}
+#stage canvas.shake{animation:shake .35s}
+@keyframes shake{
+  0%,100%{transform:translate(-50%,-50%)}
+  30%{transform:translate(calc(-50% + 14px),-50%)}
+  60%{transform:translate(calc(-50% - 8px),-50%)}
+}
+#tapLayer{position:absolute;inset:0}
+#endCard{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}
+.end-inner{background:var(--paper);border-radius:40px;padding:48px 80px;text-align:center;
+  animation:pop .45s cubic-bezier(.2,1.4,.4,1)}
+.end-inner .stars{display:flex;gap:14px;justify-content:center;margin-bottom:14px}
+.end-inner .stars i{width:26px;height:26px;border-radius:50%;display:block}
+.end-inner .stars i:nth-child(1){background:var(--pink)}
+.end-inner .stars i:nth-child(2){background:var(--sun)}
+.end-inner .stars i:nth-child(3){background:#6fb3a6}
+.end-text{font-size:64px;font-weight:700;letter-spacing:.12em}
+@keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+
+#fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+
+/* ボタンのレール：横向き＝左右の縦列、縦向き＝上下の横列 */
+.rail{position:absolute;z-index:5;display:flex;align-items:center;pointer-events:none}
+.rail > *{pointer-events:auto}
+.rail-group{display:flex;align-items:center;gap:16px}
+.rail-spacer{width:56px;height:56px;pointer-events:none}
+.round.nav,.round.quiz,#homeBtn{background:rgba(255,253,247,.16)}
+.round.nav svg.icon,#homeBtn svg.icon{stroke:var(--paper)}
+.round.nav{--hold:.8s}
+.round.big{width:72px;height:72px}
+.round.big svg.icon{width:34px;height:34px}
+
+@media (orientation: landscape){
+  #stage{top:calc(env(safe-area-inset-top) + 8px);bottom:calc(env(safe-area-inset-bottom) + 14px);
+    left:calc(env(safe-area-inset-left) + 84px);right:calc(env(safe-area-inset-right) + 84px)}
+  .rail{top:0;bottom:0;width:84px;flex-direction:column;justify-content:space-between;
+    padding:calc(env(safe-area-inset-top) + 16px) 0 calc(env(safe-area-inset-bottom) + 24px)}
+  #railL{left:env(safe-area-inset-left)}
+  #railR{right:env(safe-area-inset-right)}
+  .rail-group{flex-direction:column}
+}
+@media (orientation: portrait){
+  #stage{top:calc(env(safe-area-inset-top) + 84px);bottom:calc(env(safe-area-inset-bottom) + 100px);
+    left:calc(env(safe-area-inset-left) + 8px);right:calc(env(safe-area-inset-right) + 8px)}
+  .rail{left:0;right:0;flex-direction:row;gap:16px;
+    padding:0 calc(env(safe-area-inset-right) + 16px) 0 calc(env(safe-area-inset-left) + 16px)}
+  #railL{top:calc(env(safe-area-inset-top) + 14px)}
+  #railR{bottom:calc(env(safe-area-inset-bottom) + 18px);justify-content:space-between}
+  .rail-spacer{display:none}
+}
+
+.hint-pill{position:absolute;top:calc(env(safe-area-inset-top) + 16px);left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,.6);color:var(--paper);font-size:16px;padding:10px 18px;border-radius:999px;
+  white-space:nowrap;opacity:0;transition:opacity .3s;pointer-events:none;z-index:6}
+.hint-pill.show{opacity:1}
+.progress{position:absolute;left:0;right:0;bottom:0;height:6px;background:rgba(255,255,255,.08)}
+#progressBar{height:100%;width:0;background:var(--sun);transition:width .3s}
+
+/* ---------- 正解・不正解 ---------- */
+.round.quiz{--hold:.4s}
+#okBtn svg.icon{stroke:#ff9a9a;stroke-width:3.2}
+#ngBtn svg.icon{stroke:#9ccaff;stroke-width:3.2}
+#judge{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;z-index:4}
+#judge svg{width:min(56vw,56vh);height:min(56vw,56vh);filter:drop-shadow(0 8px 0 rgba(0,0,0,.18))}
+#judge .g-ok,#judge .g-ng{display:none}
+#judge.ok .g-ok,#judge.ng .g-ng{display:inline}
+#judge.ok svg{animation:judgeOk 1.3s ease-out forwards}
+#judge.ng svg{animation:judgeNg 1.2s ease-out forwards}
+@keyframes judgeOk{
+  0%{transform:scale(.3);opacity:0} 25%{transform:scale(1.08);opacity:1} 40%{transform:scale(1)}
+  80%{opacity:1} 100%{transform:scale(1.04);opacity:0}}
+@keyframes judgeNg{
+  0%{transform:scale(.6);opacity:0} 20%{transform:none;opacity:1} 30%{transform:translateX(-14px)}
+  40%{transform:translateX(12px)} 50%{transform:translateX(-6px)} 60%{transform:none} 80%{opacity:1} 100%{opacity:0}}
+
+/* ---------- 音声の設定 ---------- */
+.round.nav.has-audio::after{content:"";position:absolute;top:3px;right:3px;width:12px;height:12px;
+  border-radius:50%;background:var(--sun);border:2px solid var(--ink)}
+.round.nav.playing{background:rgba(245,197,66,.5)}
+#audioPanel{position:fixed;inset:0;background:rgba(47,58,86,.6);display:grid;place-items:center;z-index:40}
+#audioPanel .box{background:var(--paper);border-radius:28px;padding:30px 32px;width:min(460px,88vw);text-align:center}
+#audioPanel h2{margin:0 0 6px;font-size:24px}
+.audio-name{margin:0 0 22px;font-size:16px;opacity:.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pill.rec{background:var(--pink);color:#fff;width:100%;justify-content:center}
+.pill.rec.recording{background:var(--ink);animation:recpulse 1.2s ease-in-out infinite}
+@keyframes recpulse{50%{box-shadow:0 0 0 10px rgba(239,143,163,.4)}}
+.rec-time{margin:12px 0 0;font-size:16px;font-weight:700;color:#c9536d}
+#audioPanel .row{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+.pill.del{color:#c9536d}
+.pill:disabled{opacity:.35;pointer-events:none}
+.pill.wide{width:100%;justify-content:center}
+#audioPanel .small{font-size:13px;opacity:.65;margin:22px 0 14px;line-height:1.6}
+
+/* ---------- 共通 ---------- */
+#loading{position:fixed;inset:0;background:rgba(220,235,230,.85);display:grid;place-items:center;z-index:50}
+#loading .box{text-align:center;font-size:18px}
+.spinner{width:48px;height:48px;margin:0 auto 14px;border-radius:50%;
+  border:6px solid rgba(47,58,86,.15);border-top-color:var(--ink);animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 28px);transform:translateX(-50%);
+  background:var(--ink);color:var(--paper);padding:14px 22px;border-radius:14px;font-size:16px;
+  z-index:60;max-width:80vw;text-align:center}
+#modal{position:fixed;inset:0;background:rgba(47,58,86,.45);display:grid;place-items:center;z-index:70}
+#modal .box{background:var(--paper);border-radius:24px;padding:28px 30px;max-width:420px;width:86vw}
+#modal p{margin:0 0 22px;font-size:18px;line-height:1.6}
+#modal .row{display:flex;gap:12px;justify-content:flex-end}
+#modalOk{background:var(--pink);color:#fff}
+
+@media (prefers-reduced-motion:reduce){
+  #stage canvas{transition:opacity .2s}
+  .editing .frame{animation:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ほんだな -->
+<div id="shelf" class="screen">
+  <header class="top">
+    <h1><span class="dots"><i></i><i></i><i></i></span>えほん</h1>
+    <div class="actions">
+      <button id="addBtn" class="pill edit-only">＋ 絵本を追加</button>
+      <button id="doneBtn" class="pill primary edit-only">完了</button>
+      <button id="gearBtn" class="round" aria-label="編集（長押し）">
+        <svg class="ring" viewBox="0 0 56 56"><circle cx="28" cy="28" r="25"/></svg>
+        <svg class="icon" viewBox="0 0 28 28">
+          <path d="M5 8h18M5 14h18M5 20h18"/>
+          <circle cx="10" cy="8" r="2.6" fill="#fffdf7"/>
+          <circle cx="18" cy="14" r="2.6" fill="#fffdf7"/>
+          <circle cx="12" cy="20" r="2.6" fill="#fffdf7"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+  <p class="hint edit-only">追加・並べかえ・削除ができます。PDFのファイル名がタイトルになります。</p>
+  <p id="noSaveNote" class="note" hidden>この画面では絵本を保存できません。閉じると棚は空に戻ります。公開してホーム画面から起動すると保存されます。</p>
+  <div id="grid" class="grid"></div>
+  <div id="empty" class="empty" hidden>
+    <div class="empty-shelf"><i></i><i></i><i></i></div>
+    <p>ほんだなは まだ からっぽです</p>
+    <button id="emptyAdd" class="pill primary big">＋ PDFをえらぶ</button>
+    <p class="small">あとから追加するときは、右上のボタンを長押しします</p>
+  </div>
+  <input id="fileInput" type="file" accept="application/pdf,.pdf" multiple hidden>
+</div>
+
+<!-- よむ画面 -->
+<div id="reader" class="screen" hidden>
+  <div id="stage"></div>
+  <div id="endCard" hidden>
+    <div class="end-inner">
+      <div class="stars"><i></i><i></i><i></i></div>
+      <div class="end-text">おしまい</div>
+    </div>
+  </div>
+  <div id="tapLayer"></div>
+  <canvas id="fx"></canvas>
+  <div id="judge" hidden>
+    <svg viewBox="0 0 200 200">
+      <circle class="g-ok" cx="100" cy="100" r="70" fill="none" stroke="#ff6b6b" stroke-width="24"/>
+      <path class="g-ng" d="M48 48 152 152M152 48 48 152" stroke="#5b9bd5" stroke-width="24" stroke-linecap="round"/>
+    </svg>
+  </div>
+  <div id="railL" class="rail">
+    <button id="homeBtn" class="round" aria-label="ほんだなへ（長押し）">
+    <svg class="ring" viewBox="0 0 56 56"><circle cx="28" cy="28" r="25"/></svg>
+    <svg class="icon" viewBox="0 0 28 28"><path d="M4 13 14 4.5 24 13M7.5 10.5V23h13V10.5"/></svg>
+  </button>
+    <div id="quizBtns" class="rail-group">
+      <button id="okBtn" class="round quiz" aria-label="正解の音（長押し）">
+      <svg class="ring" viewBox="0 0 56 56"><circle cx="28" cy="28" r="25"/></svg>
+      <svg class="icon" viewBox="0 0 28 28"><circle cx="14" cy="14" r="8.5"/></svg>
+    </button>
+      <button id="ngBtn" class="round quiz" aria-label="不正解の音（長押し）">
+      <svg class="ring" viewBox="0 0 56 56"><circle cx="28" cy="28" r="25"/></svg>
+      <svg class="icon" viewBox="0 0 28 28"><path d="M7.5 7.5l13 13M20.5 7.5l-13 13"/></svg>
+    </button>
+    </div>
+    <div class="rail-spacer"></div>
+  </div>
+  <div id="railR" class="rail">
+    <button id="audioBtn" class="round nav" aria-label="このページの音声（長押し）">
+      <svg class="ring" viewBox="0 0 56 56"><circle cx="28" cy="28" r="25"/></svg>
+      <svg class="icon" viewBox="0 0 28 28"><path d="M4 11h4l6-5v16l-6-5H4z"/><path d="M18 10.5a5 5 0 0 1 0 7M21.5 7.5a9 9 0 0 1 0 13"/></svg>
+    </button>
+    <div id="navBtns" class="rail-group">
+      <button id="prevBtn" class="round nav" aria-label="前のページ（長押し）">
+      <svg class="ring" viewBox="0 0 56 56"><circle cx="28" cy="28" r="25"/></svg>
+      <svg class="icon" viewBox="0 0 28 28"><path d="M17 6 9 14l8 8"/></svg>
+    </button>
+      <button id="nextBtn" class="round nav big" aria-label="次のページ（長押し）">
+      <svg class="ring" viewBox="0 0 56 56"><circle cx="28" cy="28" r="25"/></svg>
+      <svg class="icon" viewBox="0 0 28 28"><path d="M11 6l8 8-8 8"/></svg>
+    </button>
+    </div>
+    <div class="rail-spacer"></div>
+  </div>
+  <div id="holdHint" class="hint-pill"></div>
+  <div id="navHint" class="hint-pill"></div>
+  <div class="progress"><div id="progressBar"></div></div>
+</div>
+
+<div id="audioPanel" hidden>
+  <div class="box">
+    <h2 id="audioTitle">音声</h2>
+    <p id="audioName" class="audio-name"></p>
+    <button id="recBtn" class="pill big rec">● 録音する</button>
+    <p id="recTime" class="rec-time" hidden></p>
+    <div class="row">
+      <button id="audioPick" class="pill">ファイルを選ぶ</button>
+      <button id="audioTest" class="pill">▶ 再生</button>
+      <button id="audioDel" class="pill del">削除</button>
+    </div>
+    <p class="small">子どもが画面をさわると、このページの音声が流れます。<br>録音は最長60秒です。</p>
+    <button id="audioClose" class="pill primary wide">閉じる</button>
+  </div>
+</div>
+<input id="audioInput" type="file" accept="audio/*,.m4a,.mp3,.wav,.aac" hidden>
+
+<div id="loading" hidden><div class="box"><div class="spinner"></div><div id="loadingText">よみこみ中…</div></div></div>
+<div id="toast" hidden></div>
+<div id="modal" hidden>
+  <div class="box">
+    <p id="modalMsg"></p>
+    <div class="row">
+      <button id="modalCancel" class="pill">やめる</button>
+      <button id="modalOk" class="pill">削除する</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+const $ = id => document.getElementById(id);
+const shelfEl = $('shelf'), readerEl = $('reader'), grid = $('grid'), emptyEl = $('empty');
+const stage = $('stage'), tapLayer = $('tapLayer'), endCard = $('endCard');
+const fileInput = $('fileInput');
+
+/* ================= 保存（claude.ai では window.storage、単体公開時は IndexedDB） ================= */
+function bufToB64(buf){
+  const bytes = new Uint8Array(buf); let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+function b64ToBytes(b64){
+  const bin = atob(b64); const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+const ClaudeStore = {
+  CHUNK: 3 * 1024 * 1024, // base64化で約4MB（1キー5MB未満）
+  async loadIndex(){
+    try { const r = await window.storage.get('ehon-index', false); return r ? JSON.parse(r.value) : []; }
+    catch (e) { return []; }
+  },
+  async saveIndex(list){
+    const r = await window.storage.set('ehon-index', JSON.stringify(list), false);
+    if (!r) throw new Error('index save failed');
+  },
+  async putBlob(key, buf){
+    const n = Math.max(1, Math.ceil(buf.byteLength / this.CHUNK));
+    for (let i = 0; i < n; i++) {
+      const part = buf.slice(i * this.CHUNK, (i + 1) * this.CHUNK);
+      const r = await window.storage.set(`ehon-data:${key}:${i}`, bufToB64(part), false);
+      if (!r) throw new Error('data save failed');
+    }
+    return n;
+  },
+  async getBlob(key, chunks){
+    const parts = []; let total = 0;
+    for (let i = 0; i < chunks; i++) {
+      const r = await window.storage.get(`ehon-data:${key}:${i}`, false);
+      const u = b64ToBytes(r.value); parts.push(u); total += u.length;
+    }
+    const out = new Uint8Array(total); let o = 0;
+    for (const p of parts) { out.set(p, o); o += p.length; }
+    return out.buffer;
+  },
+  async delBlob(key, chunks){
+    for (let i = 0; i < (chunks || 0); i++) {
+      try { await window.storage.delete(`ehon-data:${key}:${i}`, false); } catch (e) {}
+    }
+  },
+  async addBook(meta, buf){ meta.chunks = await this.putBlob(meta.id, buf); },
+  getData(meta){ return this.getBlob(meta.id, meta.chunks); },
+  deleteBook(meta){ return this.delBlob(meta.id, meta.chunks); }
+};
+
+const IDBStore = {
+  db: null,
+  open(){
+    if (this.db) return Promise.resolve(this.db);
+    return new Promise((res, rej) => {
+      const rq = indexedDB.open('ehon-db', 1);
+      rq.onupgradeneeded = () => { const d = rq.result; d.createObjectStore('kv'); d.createObjectStore('files'); };
+      rq.onsuccess = () => { this.db = rq.result; res(this.db); };
+      rq.onerror = () => rej(rq.error);
+    });
+  },
+  async tx(name, mode, fn){
+    const d = await this.open();
+    return new Promise((res, rej) => {
+      const t = d.transaction(name, mode); const rq = fn(t.objectStore(name));
+      t.oncomplete = () => res(rq ? rq.result : undefined);
+      t.onerror = () => rej(t.error); t.onabort = () => rej(t.error);
+    });
+  },
+  async loadIndex(){ try { return (await this.tx('kv', 'readonly', s => s.get('index'))) || []; } catch (e) { return []; } },
+  saveIndex(list){ return this.tx('kv', 'readwrite', s => s.put(list, 'index')); },
+  async putBlob(key, buf){ await this.tx('files', 'readwrite', s => s.put(buf, key)); return 1; },
+  async getBlob(key){
+    const b = await this.tx('files', 'readonly', s => s.get(key));
+    if (!b) throw new Error('missing'); return b;
+  },
+  delBlob(key){ return this.tx('files', 'readwrite', s => s.delete(key)); },
+  async addBook(meta, buf){ await this.putBlob(meta.id, buf); },
+  getData(meta){ return this.getBlob(meta.id); },
+  deleteBook(meta){ return this.delBlob(meta.id); }
+};
+
+// 保存できない環境用（アプリを閉じるまでだけ覚える）
+const MemoryStore = {
+  files: new Map(),
+  async loadIndex(){ return []; },
+  async saveIndex(){},
+  async putBlob(key, buf){ this.files.set(key, buf); return 1; },
+  async getBlob(key){
+    const b = this.files.get(key);
+    if (!b) throw new Error('missing');
+    return b.slice(0); // PDF.jsなどに渡すと元データが使えなくなることがあるため複製
+  },
+  async delBlob(key){ this.files.delete(key); },
+  async addBook(meta, buf){ await this.putBlob(meta.id, buf); },
+  getData(meta){ return this.getBlob(meta.id); },
+  deleteBook(meta){ return this.delBlob(meta.id); }
+};
+
+// 実際に書き込めるか試してから保存先を決める
+async function pickStore(){
+  if (window.storage && typeof window.storage.set === 'function') {
+    try {
+      const stamp = String(Date.now());
+      await window.storage.set('ehon-probe', stamp, false);
+      const back = await window.storage.get('ehon-probe', false);
+      if (back && back.value === stamp) {
+        try { await window.storage.delete('ehon-probe', false); } catch (e) {}
+        return { store: ClaudeStore, persistent: true };
+      }
+    } catch (e) {}
+    return { store: MemoryStore, persistent: false };
+  }
+  if (window.indexedDB) {
+    try {
+      await IDBStore.open();
+      if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+      return { store: IDBStore, persistent: true };
+    } catch (e) {}
+  }
+  return { store: MemoryStore, persistent: false };
+}
+
+let Store = MemoryStore;
+
+function showNoSave(){ $('noSaveNote').hidden = false; if (typeof layoutShelf === 'function') layoutShelf(); }
+function storeFor(b){ return b.mem ? MemoryStore : Store; }
+// 保存できる本だけ一覧を保存。失敗しても動作は続ける
+async function persistIndex(){
+  if (Store === MemoryStore) return;
+  try { await Store.saveIndex(books.filter(b => !b.mem)); }
+  catch (e) { console.warn('index save failed', e); showNoSave(); }
+}
+
+/* ================= 共通UI ================= */
+let toastTimer = null;
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3200);
+}
+function loading(on, text){
+  $('loading').hidden = !on;
+  if (text) $('loadingText').textContent = text;
+}
+function confirmBox(msg){
+  return new Promise(res => {
+    $('modalMsg').textContent = msg; $('modal').hidden = false;
+    $('modalOk').onclick = () => { $('modal').hidden = true; res(true); };
+    $('modalCancel').onclick = () => { $('modal').hidden = true; res(false); };
+  });
+}
+// 長押しボタン（子どもの誤操作防止）
+function holdButton(el, ms, onDone, onShort){
+  let timer = null, fired = false;
+  el.addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation();
+    fired = false; el.classList.add('holding');
+    timer = setTimeout(() => { timer = null; fired = true; el.classList.remove('holding'); onDone(); }, ms);
+  });
+  const end = e => {
+    e.stopPropagation();
+    const wasPending = !!timer;
+    if (timer) { clearTimeout(timer); timer = null; }
+    el.classList.remove('holding');
+    if (wasPending && !fired && e.type === 'pointerup' && onShort) onShort();
+  };
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(t => el.addEventListener(t, end));
+  el.addEventListener('click', e => e.preventDefault());
+}
+
+// ピンチ・ダブルタップ拡大・長押しメニューを抑止
+document.addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('dblclick', e => e.preventDefault());
+document.addEventListener('contextmenu', e => e.preventDefault());
+
+/* ================= ほんだな ================= */
+let books = [];
+let editMode = false;
+
+function setEdit(on){ editMode = on; renderShelf(); }
+
+function renderShelf(){
+  shelfEl.classList.toggle('editing', editMode);
+  emptyEl.hidden = books.length > 0;
+  grid.innerHTML = '';
+  books.forEach((b, i) => {
+    const card = document.createElement('div'); card.className = 'book';
+
+    const btn = document.createElement('button'); btn.className = 'cover';
+    btn.setAttribute('aria-label', b.title);
+    const frame = document.createElement('span'); frame.className = 'frame';
+    const img = new Image(); img.src = b.cover; img.alt = ''; img.draggable = false;
+    frame.appendChild(img); btn.appendChild(frame);
+    btn.addEventListener('click', () => { if (!editMode) openBook(b); });
+    card.appendChild(btn);
+
+    const ledge = document.createElement('div'); ledge.className = 'ledge'; card.appendChild(ledge);
+    const t = document.createElement('div'); t.className = 'title'; t.textContent = b.title; card.appendChild(t);
+
+    if (editMode) {
+      const tools = document.createElement('div'); tools.className = 'tools';
+      const mk = (label, cls, disabled, fn) => {
+        const x = document.createElement('button'); x.className = 'tool ' + cls;
+        x.textContent = label; x.disabled = disabled; x.addEventListener('click', fn); tools.appendChild(x);
+      };
+      mk('◀', '', i === 0, () => move(i, -1));
+      mk('✕', 'del', false, () => removeBook(b));
+      mk('▶', '', i === books.length - 1, () => move(i, 1));
+      card.appendChild(tools);
+    }
+    grid.appendChild(card);
+  });
+  layoutShelf();
+}
+
+// 横向きのとき、棚の高さから段数と表紙の大きさを決める
+const landscapeMQ = window.matchMedia('(orientation: landscape)');
+function layoutShelf(){
+  if (shelfEl.hidden) return;
+  if (!landscapeMQ.matches) {
+    grid.style.gridTemplateRows = '';
+    grid.style.removeProperty('--cover-h');
+    return;
+  }
+  grid.style.gridTemplateRows = '';
+  const H = grid.clientHeight;
+  if (!H) return;
+  const rows = H >= 600 ? 2 : 1, gap = 24;
+  const rowH = Math.floor((H - gap * (rows - 1)) / rows);
+  const coverH = Math.max(120, rowH - 14 - 36 - (editMode ? 56 : 0) - 6);
+  grid.style.gridTemplateRows = `repeat(${rows}, ${rowH}px)`;
+  grid.style.setProperty('--cover-h', coverH + 'px');
+}
+addEventListener('resize', () => requestAnimationFrame(layoutShelf));
+landscapeMQ.addEventListener && landscapeMQ.addEventListener('change', () => requestAnimationFrame(layoutShelf));
+
+async function move(i, d){
+  const j = i + d; if (j < 0 || j >= books.length) return;
+  [books[i], books[j]] = [books[j], books[i]];
+  renderShelf();
+  await persistIndex();
+}
+
+async function removeBook(b){
+  if (!await confirmBox(`「${b.title}」を削除しますか？`)) return;
+  books = books.filter(x => x !== b);
+  const cached = docCache.get(b.id);
+  if (cached) { cached.destroy(); docCache.delete(b.id); }
+  renderShelf();
+  await persistIndex();
+  try { await storeFor(b).deleteBook(b); } catch (e) { console.warn(e); }
+  if (b.audio) {
+    for (const [pg, info] of Object.entries(b.audio)) {
+      try { await audioStore(b, info).delBlob(audioKey(b.id, pg), info.chunks); } catch (e) {}
+    }
+  }
+}
+
+async function makeCover(doc){
+  const page = await doc.getPage(1);
+  const v1 = page.getViewport({ scale: 1 });
+  const vp = page.getViewport({ scale: 520 / Math.max(v1.width, v1.height) });
+  const c = document.createElement('canvas');
+  c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+  const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+  await page.render({ canvasContext: ctx, viewport: vp }).promise;
+  const url = c.toDataURL('image/jpeg', 0.85);
+  c.width = c.height = 0;
+  return url;
+}
+
+async function addFiles(files){
+  if (!files.length) return;
+  loading(true);
+  let added = 0;
+  for (const f of files) {
+    try {
+      $('loadingText').textContent = `よみこみ中… ${f.name}`;
+      const buf = await f.arrayBuffer();
+      const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf.slice(0)), verbosity: 0 }).promise;
+      const meta = {
+        id: 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+        title: f.name.replace(/\.pdf$/i, ''),
+        pages: doc.numPages,
+        cover: await makeCover(doc)
+      };
+      doc.destroy();
+      try {
+        await Store.addBook(meta, buf);
+      } catch (saveErr) {
+        console.warn('save failed, keeping in memory', saveErr);
+        await MemoryStore.addBook(meta, buf);
+        meta.mem = true;
+        showNoSave();
+      }
+      books.push(meta);
+      await persistIndex();
+      added++;
+    } catch (err) {
+      console.error(err);
+      toast(`「${f.name}」をPDFとして読み込めませんでした`);
+    }
+  }
+  loading(false);
+  renderShelf();
+  if (added) toast(`${added}冊 追加しました`);
+}
+
+fileInput.addEventListener('change', () => {
+  const files = [...fileInput.files]; fileInput.value = '';
+  addFiles(files);
+});
+$('addBtn').addEventListener('click', () => fileInput.click());
+$('emptyAdd').addEventListener('click', () => fileInput.click());
+$('doneBtn').addEventListener('click', () => setEdit(false));
+holdButton($('gearBtn'), 1000, () => setEdit(true), () => toast('長押しで編集できます'));
+
+/* ================= よむ画面 ================= */
+const docCache = new Map();          // bookId -> PDFDocumentProxy（最大2冊）
+const R = { book: null, doc: null, page: 1, total: 0, busy: false, canvas: null, ended: false, cache: new Map(), audioUrl: null };
+
+function sizeKey(){ return stage.clientWidth + 'x' + stage.clientHeight; }
+
+function freeCanvas(p){ p.then(c => { if (!c.isConnected) { c.width = 0; c.height = 0; } }).catch(() => {}); }
+
+function trimCache(){
+  const keep = new Set([R.page - 1, R.page, R.page + 1].map(n => n + '@' + sizeKey()));
+  for (const [k, p] of R.cache) if (!keep.has(k)) { R.cache.delete(k); freeCanvas(p); }
+}
+function clearCache(){ for (const p of R.cache.values()) freeCanvas(p); R.cache.clear(); }
+
+function renderPage(num){
+  const key = num + '@' + sizeKey();
+  if (R.cache.has(key)) return R.cache.get(key);
+  const doc = R.doc;
+  const p = (async () => {
+    const page = await doc.getPage(num);
+    const v1 = page.getViewport({ scale: 1 });
+    const pad = 4;
+    const W = stage.clientWidth - pad * 2, H = stage.clientHeight - pad * 2;
+    const s = Math.min(W / v1.width, H / v1.height);
+    const cw = Math.floor(v1.width * s), ch = Math.floor(v1.height * s);
+    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const MAXPX = 12e6; // iOSのcanvas上限対策
+    if (cw * ch * dpr * dpr > MAXPX) dpr = Math.sqrt(MAXPX / (cw * ch));
+    const vp = page.getViewport({ scale: s * dpr });
+    const c = document.createElement('canvas');
+    c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
+    c.style.width = cw + 'px'; c.style.height = ch + 'px';
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    return c;
+  })();
+  R.cache.set(key, p);
+  p.catch(() => R.cache.delete(key));
+  return p;
+}
+
+function prefetch(){
+  if (R.page < R.total) renderPage(R.page + 1).catch(() => {});
+  if (R.page > 1) renderPage(R.page - 1).catch(() => {});
+  trimCache();
+}
+
+function updateProgress(){
+  $('progressBar').style.width = (R.ended ? 100 : (R.page / R.total) * 100) + '%';
+}
+
+async function show(num, dir){
+  R.busy = true;
+  R.page = num;
+  updateProgress();
+  loadPageAudio();
+  try {
+    const c = await renderPage(num);
+    const old = R.canvas;
+    if (old !== c) {
+      c.classList.add('noanim');
+      c.style.setProperty('--dx', dir > 0 ? '40%' : dir < 0 ? '-40%' : '0%');
+      c.style.opacity = dir ? '0' : '1';
+      stage.appendChild(c);
+      c.getBoundingClientRect();
+      c.classList.remove('noanim');
+      if (dir) { c.style.setProperty('--dx', '0%'); c.style.opacity = '1'; }
+      if (old) {
+        old.style.setProperty('--dx', dir < 0 ? '30%' : '-30%');
+        old.style.opacity = '0';
+        setTimeout(() => { if (R.canvas !== old) old.remove(); }, 360);
+      }
+      R.canvas = c;
+    }
+    prefetch();
+  } catch (e) {
+    console.error(e); toast('ページを表示できませんでした');
+  } finally {
+    setTimeout(() => { R.busy = false; }, dir ? 230 : 0);
+  }
+}
+
+function nudge(){
+  const c = R.canvas; if (!c) return;
+  c.classList.remove('shake'); c.getBoundingClientRect(); c.classList.add('shake');
+  setTimeout(() => c.classList.remove('shake'), 400);
+}
+
+function showEnd(){
+  R.ended = true; endCard.hidden = false; updateProgress();
+  stopAudio();
+  if (R.canvas) R.canvas.style.opacity = '.25';
+}
+function hideEnd(){
+  R.ended = false; endCard.hidden = true;
+  if (R.canvas) R.canvas.style.opacity = '1';
+}
+
+async function turn(dir){
+  if (R.busy || !R.doc) return;
+  if (R.ended) {
+    hideEnd();
+    if (dir > 0) await show(1, 1);   // おしまい → もう一度さいしょから
+    else updateProgress();
+    return;
+  }
+  const t = R.page + dir;
+  if (t < 1) { nudge(); return; }
+  if (t > R.total) { showEnd(); return; }
+  await show(t, dir);
+}
+
+// 画面をさわると、ふわっと色の輪やつぶが広がる（ページはめくれない）
+const fx = $('fx'), fctx = fx.getContext('2d');
+const FX_COLORS = ['#ef8fa3', '#f5c542', '#6fb3a6', '#7fb8e6', '#b79ce0'];
+const pick = () => FX_COLORS[(Math.random() * FX_COLORS.length) | 0];
+let parts = [], fxRunning = false, fxLast = 0;
+
+function sizeFx(){
+  const d = Math.min(window.devicePixelRatio || 1, 2);
+  fx.width = Math.round(innerWidth * d); fx.height = Math.round(innerHeight * d);
+  fctx.setTransform(d, 0, 0, d, 0, 0);
+}
+function addPart(p){
+  parts.push(p);
+  if (parts.length > 320) parts.splice(0, parts.length - 320);
+  if (!fxRunning) { fxRunning = true; fxLast = performance.now(); requestAnimationFrame(fxTick); }
+}
+function burst(x, y){
+  addPart({ kind: 'ring', x, y, r: 10, max: 60 + Math.random() * 30, life: 0, dur: 750, color: pick() });
+  const n = 7, off = Math.random() * Math.PI;
+  for (let i = 0; i < n; i++) {
+    const a = off + (i / n) * Math.PI * 2, sp = 0.18 + Math.random() * 0.15;
+    addPart({ kind: 'dot', x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+              r: 6 + Math.random() * 6, life: 0, dur: 650, color: pick() });
+  }
+}
+function trail(x, y, color){
+  addPart({ kind: 'dot', x, y, vx: 0, vy: 0, r: 9 + Math.random() * 9, life: 0, dur: 600, color });
+}
+function fxTick(now){
+  const dt = Math.min(now - fxLast, 50); fxLast = now;
+  fctx.clearRect(0, 0, innerWidth, innerHeight);
+  parts = parts.filter(p => {
+    p.life += dt;
+    const t = p.life / p.dur;
+    if (t >= 1) return false;
+    fctx.globalAlpha = 1 - t;
+    fctx.beginPath();
+    if (p.kind === 'ring') {
+      const e = 1 - Math.pow(1 - t, 3);
+      fctx.lineWidth = 12 * (1 - t) + 2;
+      fctx.strokeStyle = p.color;
+      fctx.arc(p.x, p.y, p.r + (p.max - p.r) * e, 0, Math.PI * 2);
+      fctx.stroke();
+    } else {
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 0.0004 * dt;
+      fctx.fillStyle = p.color;
+      fctx.arc(p.x, p.y, Math.max(0.5, p.r * (1 - t * 0.7)), 0, Math.PI * 2);
+      fctx.fill();
+    }
+    return true;
+  });
+  fctx.globalAlpha = 1;
+  if (parts.length) requestAnimationFrame(fxTick);
+  else fxRunning = false;
+}
+
+const touches = new Map(); // 指ごとの位置と色（何本指でもOK）
+tapLayer.addEventListener('pointerdown', e => {
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY, color: pick() });
+  burst(e.clientX, e.clientY);
+});
+tapLayer.addEventListener('pointermove', e => {
+  const t = touches.get(e.pointerId); if (!t) return;
+  const dx = e.clientX - t.x, dy = e.clientY - t.y;
+  if (dx * dx + dy * dy < 16 * 16) return;
+  t.x = e.clientX; t.y = e.clientY;
+  trail(t.x, t.y, t.color);
+});
+['pointerup', 'pointercancel', 'pointerleave'].forEach(type =>
+  tapLayer.addEventListener(type, e => touches.delete(e.pointerId)));
+
+// ページめくりは右上のボタンを長押し（親用）
+function flashHint(el, text){
+  if (text) el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 1600);
+}
+holdButton($('prevBtn'), 800, () => turn(-1), () => flashHint($('navHint'), '長押しで ページをめくる'));
+holdButton($('nextBtn'), 800, () => turn(1), () => flashHint($('navHint'), '長押しで ページをめくる'));
+
+// 画面が暗くならないように
+let wakeLock = null;
+async function requestWake(){
+  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+}
+function releaseWake(){ try { if (wakeLock) wakeLock.release(); } catch (e) {} wakeLock = null; }
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !readerEl.hidden) requestWake();
+});
+
+async function openBook(b){
+  if (typeof pdfjsLib === 'undefined') { toast('PDF表示ライブラリを読み込めませんでした。通信を確認してください'); return; }
+  loading(true, 'ひらいています…');
+  try {
+    let doc = docCache.get(b.id);
+    if (!doc) {
+      const buf = await storeFor(b).getData(b);
+      doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf), verbosity: 0 }).promise;
+      docCache.set(b.id, doc);
+      while (docCache.size > 2) {
+        const [k, d] = docCache.entries().next().value;
+        docCache.delete(k); d.destroy();
+      }
+    }
+    R.book = b; R.doc = doc; R.total = doc.numPages; R.canvas = null;
+    clearCache(); stage.innerHTML = ''; hideEnd();
+    shelfEl.hidden = true; readerEl.hidden = false;
+    sizeFx(); parts = []; touches.clear();
+    await show(1, 0);
+    requestWake();
+  } catch (e) {
+    console.error(e); toast('この絵本をひらけませんでした');
+    closeBook();
+  } finally {
+    loading(false);
+  }
+}
+
+function closeBook(){
+  unloadAudio();
+  $('judge').hidden = true;
+  panel.hidden = true;
+  $('audioBtn').classList.remove('has-audio');
+  clearCache();
+  stage.querySelectorAll('canvas').forEach(c => { c.width = 0; c.height = 0; });
+  stage.innerHTML = '';
+  R.canvas = null; R.doc = null; R.book = null; R.busy = false;
+  hideEnd(); releaseWake();
+  readerEl.hidden = true; shelfEl.hidden = false;
+  layoutShelf();
+}
+
+/* ================= ページの音声（再生・ファイル・録音） ================= */
+const player = new Audio();
+player.preload = 'auto';
+// iPadの音声モード：ふだんは再生専用、録音中だけ「再生＋録音」に切り替える
+// （再生専用のままだとマイクが使えないため）
+function setAudioSession(type){
+  try { if (navigator.audioSession) navigator.audioSession.type = type; } catch (e) {}
+}
+setAudioSession('playback');
+function audioKey(id, page){ return `${id}-p${page}`; }
+function audioStore(book, info){ return (book.mem || info.mem) ? MemoryStore : Store; }
+let audioToken = 0, audioFor = null, playFailed = false, rec = null;
+const REC_MAX = 60;
+
+['play', 'playing'].forEach(t => player.addEventListener(t, () => $('audioBtn').classList.add('playing')));
+['pause', 'ended', 'emptied'].forEach(t => player.addEventListener(t, () => $('audioBtn').classList.remove('playing')));
+
+function stopAudio(){ try { player.pause(); player.currentTime = 0; } catch (e) {} }
+function unloadAudio(){
+  stopAudio();
+  player.removeAttribute('src');
+  try { player.load(); } catch (e) {}
+  if (R.audioUrl) { URL.revokeObjectURL(R.audioUrl); R.audioUrl = null; }
+  audioFor = null;
+}
+async function loadPageAudio(force){
+  if (!R.book) return;
+  const tag = R.book.id + ':' + R.page;
+  const info = R.book.audio && R.book.audio[R.page];
+  $('audioBtn').classList.toggle('has-audio', !!info);
+  if (!force && audioFor === tag) return;
+  const tok = ++audioToken;
+  unloadAudio();
+  audioFor = tag;
+  if (!info) return;
+  try {
+    const buf = await audioStore(R.book, info).getBlob(audioKey(R.book.id, R.page), info.chunks);
+    if (tok !== audioToken) return;
+    R.audioUrl = URL.createObjectURL(new Blob([buf], { type: info.type || 'audio/mp4' }));
+    player.src = R.audioUrl;
+    player.load();
+  } catch (e) { console.warn('audio load failed', e); }
+}
+// 子どもがさわったら再生（再生中なら最後まで流す）
+function tryPlay(){
+  if (!R.audioUrl || R.ended || rec || !$('audioPanel').hidden) return Promise.resolve(true);
+  if (!player.paused) return Promise.resolve(true);
+  try { player.currentTime = 0; } catch (e) {}
+  return player.play().then(() => true, () => false);
+}
+tapLayer.addEventListener('pointerdown', () => { tryPlay().then(ok => { playFailed = !ok; }); });
+tapLayer.addEventListener('pointerup', () => { if (playFailed) { playFailed = false; tryPlay(); } });
+
+// 設定パネル（親用）
+const panel = $('audioPanel');
+function refreshPanel(){
+  const info = R.book && R.book.audio && R.book.audio[R.page];
+  $('audioTitle').textContent = `${R.page}ページめの音声`;
+  $('audioName').textContent = info ? info.name : 'まだ設定されていません';
+  $('audioTest').disabled = !info || !!rec;
+  $('audioDel').disabled = !info || !!rec;
+  $('audioPick').disabled = !!rec;
+  $('audioClose').disabled = !!rec;
+  $('recBtn').textContent = rec ? '■ 録音を止める' : (info ? '● 録音しなおす' : '● 録音する');
+  $('recBtn').classList.toggle('recording', !!rec);
+  $('recTime').hidden = !rec;
+}
+function openPanel(){ if (!R.book) return; stopAudio(); refreshPanel(); panel.hidden = false; }
+function closePanel(){ if (rec) return; stopAudio(); panel.hidden = true; }
+panel.addEventListener('click', e => { if (e.target === panel) closePanel(); });
+$('audioClose').addEventListener('click', closePanel);
+holdButton($('audioBtn'), 800, openPanel, () => flashHint($('navHint'), '長押しで 音声を設定'));
+
+function guessAudioType(name){
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  return ({ mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav', ogg: 'audio/ogg', caf: 'audio/x-caf' })[ext] || 'audio/mpeg';
+}
+
+async function savePageAudio(buf, type, name){
+  const book = R.book, page = R.page;
+  if (!book) return;
+  loading(true, '音声を保存中…');
+  try {
+    book.audio = book.audio || {};
+    const key = audioKey(book.id, page);
+    const old = book.audio[page];
+    if (old) { try { await audioStore(book, old).delBlob(key, old.chunks); } catch (e) {} }
+    const info = { name, type };
+    const target = book.mem ? MemoryStore : Store;
+    try {
+      info.chunks = await target.putBlob(key, buf);
+      if (target === MemoryStore) info.mem = true;
+    } catch (e) {
+      console.warn('audio save failed, keeping in memory', e);
+      info.chunks = await MemoryStore.putBlob(key, buf);
+      info.mem = true;
+      showNoSave();
+    }
+    book.audio[page] = info;
+    await persistIndex();
+    if (R.book === book && R.page === page) await loadPageAudio(true);
+    toast('音声を設定しました');
+  } catch (e) {
+    console.error(e); toast('音声を保存できませんでした');
+  } finally {
+    loading(false); refreshPanel();
+  }
+}
+
+$('audioPick').addEventListener('click', () => $('audioInput').click());
+$('audioInput').addEventListener('change', async () => {
+  const f = $('audioInput').files[0];
+  $('audioInput').value = '';
+  if (!f) return;
+  try { await savePageAudio(await f.arrayBuffer(), f.type || guessAudioType(f.name), f.name); }
+  catch (e) { toast('音声ファイルを読み込めませんでした'); }
+});
+$('audioTest').addEventListener('click', () => {
+  stopAudio();
+  player.play().catch(() => toast('この音声は再生できませんでした'));
+});
+$('audioDel').addEventListener('click', async () => {
+  const book = R.book, page = R.page;
+  const info = book && book.audio && book.audio[page];
+  if (!info) return;
+  if (!await confirmBox(`${page}ページめの音声を削除しますか？`)) return;
+  delete book.audio[page];
+  try { await audioStore(book, info).delBlob(audioKey(book.id, page), info.chunks); } catch (e) {}
+  await persistIndex();
+  await loadPageAudio(true);
+  refreshPanel();
+  toast('音声を削除しました');
+});
+
+// 録音
+function pickRecType(){
+  if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return '';
+  return ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+}
+async function startRec(){
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+    toast('この画面では録音できません'); return;
+  }
+  stopAudio();
+  let stream;
+  setAudioSession('play-and-record');
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  } catch (e) {
+    setAudioSession('playback');
+    console.error(e);
+    const msg = {
+      NotAllowedError: 'マイクの使用が許可されていません。設定のSafari→マイクを確認してください',
+      NotFoundError: 'マイクが見つかりませんでした',
+      NotReadableError: 'ほかのアプリがマイクを使っているため録音できません',
+      SecurityError: 'この開き方ではマイクを使えません。https のページから開いてください'
+    }[e && e.name];
+    toast((msg || 'マイクを使えませんでした') + `（${(e && e.name) || 'Error'}）`);
+    return;
+  }
+  const type = pickRecType();
+  let recorder;
+  try { recorder = type ? new MediaRecorder(stream, { mimeType: type }) : new MediaRecorder(stream); }
+  catch (e) { stream.getTracks().forEach(t => t.stop()); setAudioSession('playback'); toast(`録音を開始できませんでした（${(e && e.name) || 'Error'}）`); return; }
+  const r = { recorder, stream, chunks: [], start: Date.now(), timer: null };
+  recorder.ondataavailable = e => { if (e.data && e.data.size) r.chunks.push(e.data); };
+  recorder.onstop = () => finishRec(r);
+  recorder.start();
+  rec = r;
+  const tick = () => {
+    const sec = Math.floor((Date.now() - r.start) / 1000);
+    $('recTime').textContent = `録音中 ${sec}秒`;
+    if (sec >= REC_MAX) stopRec();
+  };
+  tick();
+  r.timer = setInterval(tick, 250);
+  refreshPanel();
+}
+function stopRec(){
+  if (rec && rec.recorder.state !== 'inactive') rec.recorder.stop();
+}
+async function finishRec(r){
+  clearInterval(r.timer);
+  r.stream.getTracks().forEach(t => t.stop());
+  setAudioSession('playback');
+  const sec = Math.max(1, Math.round((Date.now() - r.start) / 1000));
+  rec = null;
+  refreshPanel();
+  const type = (r.recorder.mimeType || (r.chunks[0] && r.chunks[0].type) || 'audio/mp4').split(';')[0];
+  const blob = new Blob(r.chunks, { type });
+  if (!blob.size) { toast('録音できませんでした'); return; }
+  await savePageAudio(await blob.arrayBuffer(), type, `録音（${sec}秒）`);
+}
+$('recBtn').addEventListener('click', () => { if (rec) stopRec(); else startRec(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') { stopRec(); stopAudio(); } });
+
+holdButton($('homeBtn'), 1000, closeBook, () => flashHint($('holdHint'), '長押しで ほんだなへ'));
+
+/* ================= 正解・不正解の音（親用） ================= */
+let actx = null;
+function audioCtx(){
+  const C = window.AudioContext || window.webkitAudioContext;
+  if (!C) return null;
+  if (!actx) actx = new C();
+  if (actx.state === 'suspended') actx.resume().catch(() => {});
+  return actx;
+}
+function bell(c, freq, start, dur){ // ピン・ポーン用のやわらかい鐘の音
+  [[1, 0.32], [2, 0.06], [3, 0.02]].forEach(([mul, vol]) => {
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(freq * mul, start);
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.exponentialRampToValueAtTime(vol, start + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+    o.connect(g); g.connect(c.destination);
+    o.start(start); o.stop(start + dur + 0.05);
+  });
+}
+function buzz(c, start, dur){ // ブッ・ブー（1歳向けに控えめな音量）
+  const o = c.createOscillator(), f = c.createBiquadFilter(), g = c.createGain();
+  o.type = 'square'; o.frequency.value = 165;
+  f.type = 'lowpass'; f.frequency.value = 1100;
+  g.gain.setValueAtTime(0.0001, start);
+  g.gain.linearRampToValueAtTime(0.1, start + 0.015);
+  g.gain.setValueAtTime(0.1, start + dur - 0.04);
+  g.gain.linearRampToValueAtTime(0.0001, start + dur);
+  o.connect(f); f.connect(g); g.connect(c.destination);
+  o.start(start); o.stop(start + dur + 0.05);
+}
+function playCorrect(){
+  const c = audioCtx(); if (!c) return;
+  const t = c.currentTime + 0.03;
+  bell(c, 1318.5, t, 0.35); bell(c, 1046.5, t + 0.18, 0.6);
+  bell(c, 1318.5, t + 0.6, 0.35); bell(c, 1046.5, t + 0.78, 0.95);
+}
+function playWrong(){
+  const c = audioCtx(); if (!c) return;
+  const t = c.currentTime + 0.03;
+  buzz(c, t, 0.18); buzz(c, t + 0.26, 0.5);
+}
+function showJudge(kind){
+  const j = $('judge');
+  j.hidden = false; j.className = '';
+  j.getBoundingClientRect();
+  j.className = kind;
+  clearTimeout(j._t);
+  j._t = setTimeout(() => { j.hidden = true; j.className = ''; }, 1350);
+  if (kind === 'ok') {
+    for (let i = 0; i < 6; i++) {
+      setTimeout(() => burst(innerWidth * (0.2 + Math.random() * 0.6), innerHeight * (0.2 + Math.random() * 0.6)), i * 90);
+    }
+  }
+}
+function judge(kind){
+  stopAudio();
+  if (kind === 'ok') playCorrect(); else playWrong();
+  showJudge(kind);
+}
+// iPadでは音を出す前に「さわった瞬間」に音声機能を起こしておく必要がある
+[$('okBtn'), $('ngBtn'), tapLayer].forEach(el => el.addEventListener('pointerdown', () => audioCtx()));
+const quizHint = () => flashHint($('holdHint'), '長押しで 正解・不正解の音');
+holdButton($('okBtn'), 400, () => judge('ok'), quizHint);
+holdButton($('ngBtn'), 400, () => judge('ng'), quizHint);
+
+// 回転・サイズ変更時に描き直し
+let resizeTimer = null;
+addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(async () => {
+    if (readerEl.hidden || !R.doc) return;
+    sizeFx();
+    const old = R.canvas; R.canvas = null;
+    clearCache();
+    await show(R.page, 0);
+    if (old && old !== R.canvas) { old.remove(); old.width = 0; old.height = 0; }
+    if (R.ended && R.canvas) R.canvas.style.opacity = '.25';
+  }, 200);
+});
+
+/* ================= 起動 ================= */
+(async () => {
+  if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  } else {
+    toast('PDF表示ライブラリを読み込めませんでした。通信を確認してください');
+  }
+  const picked = await pickStore();
+  Store = picked.store;
+  $('noSaveNote').hidden = picked.persistent;
+  layoutShelf();
+  books = await Store.loadIndex();
+  // 前回メモリにだけ置いていた音声は残っていないので一覧から外す
+  books.forEach(b => {
+    if (b.audio) for (const k of Object.keys(b.audio)) if (b.audio[k].mem) delete b.audio[k];
+  });
+  renderShelf();
+})();
+
+})();
+</script>
+</body>
+</html>
