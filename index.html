@@ -246,6 +246,7 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
 .pill.del{color:#c9536d}
 .pill:disabled{opacity:.35;pointer-events:none}
 .pill.wide{width:100%;justify-content:center}
+#audioPanel .diag{margin:14px 0 0;font-size:12px;opacity:.5}
 #audioPanel .small{font-size:13px;opacity:.65;margin:22px 0 14px;line-height:1.6}
 
 /* ---------- 共通 ---------- */
@@ -370,6 +371,7 @@ button:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
     </div>
     <p class="small">子どもが画面をさわると、このページの音声が流れます。<br>録音は最長60秒です。</p>
     <button id="audioClose" class="pill primary wide">閉じる</button>
+    <p id="diag" class="diag"></p>
   </div>
 </div>
 <input id="audioInput" type="file" accept="audio/*,.m4a,.mp3,.wav,.aac" hidden>
@@ -961,12 +963,9 @@ function closeBook(){
 /* ================= ページの音声（再生・ファイル・録音） ================= */
 const player = new Audio();
 player.preload = 'auto';
-// iPadの音声モード：ふだんは再生専用、録音中だけ「再生＋録音」に切り替える
-// （再生専用のままだとマイクが使えないため）
-function setAudioSession(type){
-  try { if (navigator.audioSession) navigator.audioSession.type = type; } catch (e) {}
-}
-setAudioSession('playback');
+const APP_VERSION = '1.4';
+const IN_FRAME = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
+const IS_HOME_APP = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
 function audioKey(id, page){ return `${id}-p${page}`; }
 function audioStore(book, info){ return (book.mem || info.mem) ? MemoryStore : Store; }
 let audioToken = 0, audioFor = null, playFailed = false, rec = null;
@@ -1024,6 +1023,7 @@ function refreshPanel(){
   $('recBtn').textContent = rec ? '■ 録音を止める' : (info ? '● 録音しなおす' : '● 録音する');
   $('recBtn').classList.toggle('recording', !!rec);
   $('recTime').hidden = !rec;
+  $('diag').textContent = `バージョン ${APP_VERSION}　起動方法：${IN_FRAME ? '埋め込み表示' : IS_HOME_APP ? 'ホーム画面' : 'Safari'}`;
 }
 function openPanel(){ if (!R.book) return; stopAudio(); refreshPanel(); panel.hidden = false; }
 function closePanel(){ if (rec) return; stopAudio(); panel.hidden = true; }
@@ -1098,16 +1098,17 @@ function pickRecType(){
   return ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm'].find(t => MediaRecorder.isTypeSupported(t)) || '';
 }
 async function startRec(){
+  if (IN_FRAME) {
+    toast('Claudeなどの画面の中では録音できません。ホーム画面のアプリから開いてください'); return;
+  }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
-    toast('この画面では録音できません'); return;
+    toast('この画面では録音できません。Safariで https のページから開いてください'); return;
   }
   stopAudio();
   let stream;
-  setAudioSession('play-and-record');
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
   } catch (e) {
-    setAudioSession('playback');
     console.error(e);
     const msg = {
       NotAllowedError: 'マイクの使用が許可されていません。設定のSafari→マイクを確認してください',
@@ -1121,7 +1122,7 @@ async function startRec(){
   const type = pickRecType();
   let recorder;
   try { recorder = type ? new MediaRecorder(stream, { mimeType: type }) : new MediaRecorder(stream); }
-  catch (e) { stream.getTracks().forEach(t => t.stop()); setAudioSession('playback'); toast(`録音を開始できませんでした（${(e && e.name) || 'Error'}）`); return; }
+  catch (e) { stream.getTracks().forEach(t => t.stop()); toast(`録音を開始できませんでした（${(e && e.name) || 'Error'}）`); return; }
   const r = { recorder, stream, chunks: [], start: Date.now(), timer: null };
   recorder.ondataavailable = e => { if (e.data && e.data.size) r.chunks.push(e.data); };
   recorder.onstop = () => finishRec(r);
@@ -1142,7 +1143,6 @@ function stopRec(){
 async function finishRec(r){
   clearInterval(r.timer);
   r.stream.getTracks().forEach(t => t.stop());
-  setAudioSession('playback');
   const sec = Math.max(1, Math.round((Date.now() - r.start) / 1000));
   rec = null;
   refreshPanel();
