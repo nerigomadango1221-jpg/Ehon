@@ -181,22 +181,22 @@
 const VEHICLES = {
   car: {
     name:"じどうしゃ", goalName:"スーパー", dest:"market",
-    body:"#e8483c", dark:"#c2372d", light:"#ff7a6e", len:74, wid:38,
+    body:"#e8483c", dark:"#c2372d", light:"#ff7a6e", len:96, hgt:46,
     goalLine:"かいものに とうちゃく！", trail:"#ff8f6b"
   },
   fire: {
     name:"しょうぼうしゃ", goalName:"かじの おうち", dest:"fire",
-    body:"#d9261c", dark:"#a81c14", light:"#ff6a5e", len:96, wid:40,
+    body:"#d9261c", dark:"#a81c14", light:"#ff6a5e", len:124, hgt:56,
     goalLine:"かじを けしました！", trail:"#ffb04d"
   },
   ambulance: {
     name:"きゅうきゅうしゃ", goalName:"びょういん", dest:"hospital",
-    body:"#f7f4ee", dark:"#cfc8bb", light:"#ffffff", len:92, wid:40,
+    body:"#f7f4ee", dark:"#cfc8bb", light:"#ffffff", len:116, hgt:56,
     goalLine:"びょういんに とうちゃく！", trail:"#6fd0e8"
   },
   police: {
     name:"パトカー", goalName:"けいさつしょ", dest:"police",
-    body:"#f3f0ea", dark:"#1f2838", light:"#ffffff", len:80, wid:38,
+    body:"#f3f0ea", dark:"#1f2838", light:"#ffffff", len:104, hgt:48,
     goalLine:"パトロール かんりょう！", trail:"#6aa6ff"
   }
 };
@@ -318,7 +318,7 @@ let mode = "select";
 let vkey = "car", V = VEHICLES.car;
 let road = null;          // {pts, samples, step, total, width}
 let signs = [], decor = [], particles = [], popups = [], confetti = [];
-let car = { s:0, target:0, angle:0, drag:false, idx:0 };
+let car = { s:0, target:0, angle:0, drag:false, flip:false, idx:0 };
 let arrived = false, arriveTime = 0, fireOut = 0;
 let started = false;
 let t0 = performance.now();
@@ -333,7 +333,7 @@ function cr(p0,p1,p2,p3,t){
 }
 
 function buildRoad(){
-  const width = clamp(Math.min(W,H)*0.09, 46, 68);
+  const width = clamp(Math.min(W,H)*0.10, 50, 74);
   const padX = clamp(W*0.17, width*1.5, 190);
   const top = H*0.17, bottom = H*0.83;
   const rows = clamp(Math.round(H/210), 3, 5);
@@ -466,7 +466,7 @@ function buildDecor(){
 function startLevel(key){
   vkey = key; V = VEHICLES[key];
   buildRoad(); buildSigns(); buildDecor();
-  car.s = 0; car.target = 0; car.angle = angleAt(0); car.drag = false;
+  car.s = 0; car.target = 0; car.angle = angleAt(0); car.drag = false; car.flip = false;
   particles = []; popups = []; confetti = [];
   arrived = false; arriveTime = 0; fireOut = 0; started = false;
   mode = "play";
@@ -885,97 +885,168 @@ function drawSigns(){
 }
 
 /* ------------------------------------------------------------ vehicles */
-function wheel(g,x,y,w,h){
+let spin = 0;   // タイヤの回転
+
+function wheel(g, cx, cy, r){
   g.fillStyle = "#2f3237";
-  roundRect(g, x, y, w, h, 3); g.fill();
+  g.beginPath(); g.arc(cx, cy, r, 0, Math.PI*2); g.fill();
+  g.fillStyle = "#e3e7ec";
+  g.beginPath(); g.arc(cx, cy, r*0.5, 0, Math.PI*2); g.fill();
+  g.save();
+  g.translate(cx, cy); g.rotate(spin);
+  g.fillStyle = "#b6bec8";
+  for(let i=0;i<4;i++){
+    g.rotate(Math.PI/2);
+    roundRect(g, -1.6, -r*0.46, 3.2, r*0.46, 1.5); g.fill();
+  }
+  g.restore();
+  g.fillStyle = "#8d96a1";
+  g.beginPath(); g.arc(cx, cy, r*0.16, 0, Math.PI*2); g.fill();
 }
+
+function lightBar(g, x, y, w, h, t){
+  const blink = Math.sin(t*9) > 0;
+  g.fillStyle = blink ? "#ff5d52" : "#8e2a22";
+  roundRect(g, x, y, w/2, h, 3); g.fill();
+  g.fillStyle = blink ? "#3d5fbf" : "#6aa6ff";
+  roundRect(g, x + w/2, y, w/2, h, 3); g.fill();
+}
+
 function drawVehicle(g, key, t){
   const v = VEHICLES[key];
-  const L = v.len, Wd = v.wid;
-  // shadow
-  g.fillStyle = "rgba(40,50,30,.25)";
-  roundRect(g, -L/2+4, -Wd/2+6, L, Wd, 12); g.fill();
-  // wheels
-  wheel(g, L*0.12, -Wd/2-5, 18, 7); wheel(g, L*0.12, Wd/2-2, 18, 7);
-  wheel(g, -L*0.34, -Wd/2-5, 18, 7); wheel(g, -L*0.34, Wd/2-2, 18, 7);
-  if(key === "fire"){ wheel(g, -L*0.08, -Wd/2-5, 16, 7); wheel(g, -L*0.08, Wd/2-2, 16, 7); }
-  // body
-  g.fillStyle = v.body;
-  roundRect(g, -L/2, -Wd/2, L, Wd, 11); g.fill();
-  g.strokeStyle = v.dark; g.lineWidth = 2;
-  roundRect(g, -L/2, -Wd/2, L, Wd, 11); g.stroke();
+  const ground = v.hgt/2;
+  g.fillStyle = "rgba(40,50,30,.22)";
+  g.beginPath(); g.ellipse(0, ground+3, v.len*0.44, 5, 0, 0, Math.PI*2); g.fill();
+  if(key === "car") sideCar(g, v, ground, t);
+  else if(key === "fire") sideFire(g, v, ground, t);
+  else if(key === "ambulance") sideAmbulance(g, v, ground, t);
+  else sidePolice(g, v, ground, t);
+}
 
-  if(key === "car"){
-    g.fillStyle = "#bfe4ef";
-    roundRect(g, L*0.10, -Wd/2+4, 12, Wd-8, 4); g.fill();
-    roundRect(g, -L*0.30, -Wd/2+5, 10, Wd-10, 4); g.fill();
-    g.fillStyle = v.dark;
-    roundRect(g, -L*0.18, -Wd/2+3, 22, Wd-6, 6); g.fill();
-  }
-  if(key === "fire"){
-    g.fillStyle = "#f2f4f6";
-    roundRect(g, L*0.06, -Wd/2+4, 13, Wd-8, 4); g.fill();
-    // ladder
-    g.fillStyle = "#d8dce0";
-    roundRect(g, -L*0.46, -10, L*0.62, 4, 2); g.fill();
-    roundRect(g, -L*0.46, 6, L*0.62, 4, 2); g.fill();
-    for(let i=0;i<7;i++){ roundRect(g, -L*0.44 + i*(L*0.085), -9, 3.5, 18, 1.5); g.fill(); }
-    g.fillStyle = "#ffd166";
-    roundRect(g, -L*0.50, -Wd/2+3, 6, Wd-6, 3); g.fill();
-  }
-  if(key === "ambulance"){
-    g.fillStyle = "#bfe4ef";
-    roundRect(g, L*0.08, -Wd/2+4, 13, Wd-8, 4); g.fill();
-    g.fillStyle = "#e8483c";
-    roundRect(g, -L*0.44, -Wd/2+2, L*0.5, 5, 2); g.fill();
-    roundRect(g, -L*0.44, Wd/2-7, L*0.5, 5, 2); g.fill();
-    roundRect(g, -L*0.26, -3, 22, 6, 2); g.fill();
-    roundRect(g, -L*0.18, -11, 6, 22, 2); g.fill();
-  }
-  if(key === "police"){
-    g.fillStyle = "#bfe4ef";
-    roundRect(g, L*0.10, -Wd/2+4, 12, Wd-8, 4); g.fill();
-    g.fillStyle = "#1f2838";
-    roundRect(g, -L*0.42, -Wd/2, L*0.34, Wd, 6); g.fill();
-    g.fillStyle = "#f3f0ea";
-    g.font = "800 9px 'M PLUS Rounded 1c', sans-serif";
-    g.textAlign="center"; g.textBaseline="middle";
-    g.fillText("POLICE", -L*0.25, 0);
-  }
-  // lights
-  const blink = Math.sin(t*9) > 0;
-  if(key === "fire" || key === "ambulance" || key === "police"){
-    g.fillStyle = blink ? "#ff5d52" : "#8e2a22";
-    roundRect(g, -L*0.06, -Wd/2-4, 10, 8, 3); g.fill();
-    g.fillStyle = blink ? "#3d5fbf" : "#6aa6ff";
-    roundRect(g, -L*0.06, Wd/2-4, 10, 8, 3); g.fill();
-  }
-  // headlights
+function sideCar(g, v, ground, t){
+  const wr = 11, wy = ground - wr;
+  wheel(g, -27, wy, wr); wheel(g, 29, wy, wr);
+  g.fillStyle = v.body;
+  roundRect(g, -28, -23, 52, 25, 11); g.fill();
+  roundRect(g, -46, -6, 92, 24, 11); g.fill();
+  g.strokeStyle = v.dark; g.lineWidth = 2;
+  roundRect(g, -46, -6, 92, 24, 11); g.stroke();
+  g.fillStyle = "#bfe4ef";
+  roundRect(g, -23, -19, 20, 15, 4); g.fill();
+  roundRect(g, 1, -19, 19, 15, 4); g.fill();
+  g.strokeStyle = v.dark; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(-1, -2); g.lineTo(-1, 14); g.stroke();
+  g.fillStyle = v.dark;
+  roundRect(g, 4, 3, 9, 3, 1.5); g.fill();
   g.fillStyle = "#fff3c4";
-  roundRect(g, L/2-6, -Wd/2+4, 5, 7, 2); g.fill();
-  roundRect(g, L/2-6, Wd/2-11, 5, 7, 2); g.fill();
+  roundRect(g, 39, 0, 7, 8, 3); g.fill();
   g.fillStyle = "#ff8f7a";
-  roundRect(g, -L/2+2, -Wd/2+4, 4, 7, 2); g.fill();
-  roundRect(g, -L/2+2, Wd/2-11, 4, 7, 2); g.fill();
+  roundRect(g, -46, 0, 6, 8, 3); g.fill();
+}
+
+function sideFire(g, v, ground, t){
+  const wr = 12, wy = ground - wr;
+  wheel(g, -40, wy, wr); wheel(g, -14, wy, wr); wheel(g, 38, wy, wr);
+  g.fillStyle = v.body;
+  roundRect(g, -60, -18, 80, 34, 7); g.fill();
+  roundRect(g, 14, -28, 46, 44, 9); g.fill();
+  g.strokeStyle = v.dark; g.lineWidth = 2;
+  roundRect(g, 14, -28, 46, 44, 9); g.stroke();
+  g.fillStyle = "#bfe4ef";
+  roundRect(g, 22, -23, 30, 16, 4); g.fill();
+  // はしご
+  g.fillStyle = "#d8dce0";
+  roundRect(g, -58, -26, 76, 4, 2); g.fill();
+  roundRect(g, -58, -20, 76, 4, 2); g.fill();
+  for(let i=0;i<8;i++){ roundRect(g, -55 + i*9.2, -26, 3.5, 10, 1.5); g.fill(); }
+  // 装備の扉
+  g.fillStyle = "#ffd166";
+  roundRect(g, -58, -3, 76, 5, 2); g.fill();
+  g.fillStyle = v.dark;
+  roundRect(g, -54, 5, 24, 10, 3); g.fill();
+  roundRect(g, -26, 5, 24, 10, 3); g.fill();
+  lightBar(g, 24, -34, 26, 7, t);
+  g.fillStyle = "#d8dce0";
+  roundRect(g, 54, 6, 8, 10, 3); g.fill();
+  g.fillStyle = "#fff3c4";
+  roundRect(g, 52, -5, 8, 9, 3); g.fill();
+}
+
+function sideAmbulance(g, v, ground, t){
+  const wr = 12, wy = ground - wr;
+  wheel(g, -30, wy, wr); wheel(g, 30, wy, wr);
+  g.fillStyle = v.body;
+  roundRect(g, -56, -28, 90, 44, 8); g.fill();
+  roundRect(g, 20, -20, 36, 36, 8); g.fill();
+  g.strokeStyle = v.dark; g.lineWidth = 2;
+  roundRect(g, -56, -28, 90, 44, 8); g.stroke();
+  roundRect(g, 20, -20, 36, 36, 8); g.stroke();
+  g.fillStyle = "#bfe4ef";
+  roundRect(g, 26, -15, 25, 14, 4); g.fill();
+  roundRect(g, -48, -22, 22, 15, 4); g.fill();
+  g.fillStyle = "#e8483c";
+  roundRect(g, -56, 1, 112, 7, 3); g.fill();
+  roundRect(g, -15, -20, 9, 24, 2); g.fill();
+  roundRect(g, -22.5, -12.5, 24, 9, 2); g.fill();
+  lightBar(g, 18, -27, 24, 7, t);
+  g.fillStyle = "#fff3c4";
+  roundRect(g, 49, -6, 8, 9, 3); g.fill();
+  g.fillStyle = "#ff8f7a";
+  roundRect(g, -56, -6, 7, 9, 3); g.fill();
+}
+
+function sidePolice(g, v, ground, t){
+  const wr = 11, wy = ground - wr;
+  wheel(g, -29, wy, wr); wheel(g, 31, wy, wr);
+  g.fillStyle = v.body;
+  roundRect(g, -28, -24, 52, 25, 11); g.fill();
+  roundRect(g, -50, -6, 100, 24, 11); g.fill();
+  g.strokeStyle = "#c8c4bb"; g.lineWidth = 2;
+  roundRect(g, -50, -6, 100, 24, 11); g.stroke();
+  g.fillStyle = "#bfe4ef";
+  roundRect(g, -23, -20, 21, 16, 4); g.fill();
+  roundRect(g, 2, -20, 19, 16, 4); g.fill();
+  g.fillStyle = v.dark;
+  roundRect(g, -20, -3, 36, 17, 5); g.fill();
+  // バッジ
+  g.fillStyle = "#f2c14e";
+  g.beginPath();
+  for(let i=0;i<10;i++){
+    const r = i%2 ? 3 : 7, a = -Math.PI/2 + i*Math.PI/5;
+    const x = -2 + Math.cos(a)*r, y = 6 + Math.sin(a)*r;
+    i ? g.lineTo(x,y) : g.moveTo(x,y);
+  }
+  g.closePath(); g.fill();
+  lightBar(g, -13, -30, 28, 8, t);
+  g.fillStyle = "#fff3c4";
+  roundRect(g, 43, 0, 7, 8, 3); g.fill();
+  g.fillStyle = "#ff8f7a";
+  roundRect(g, -50, 0, 6, 8, 3); g.fill();
 }
 
 function vehicleScale(){
-  const room = road.width/2 - 3;            // how far from the centre line we may reach
-  const a = (V.len*V.len) / (8*road.rmin);  // corner overhang on the tightest bend
-  const b = V.wid/2;
+  const room = road.width/2 + 9;             // 横から見た車は少しだけ道より大きくてよい
+  const a = (V.len*V.len) / (8*road.rmin);   // 一番きついカーブでの角のはみ出し
+  const b = V.hgt/2;
   const sc = (-b + Math.sqrt(b*b + 4*a*room)) / (2*a);
-  return clamp(Math.min(sc, (road.width-8)/V.wid), .45, 1.25);
+  return clamp(Math.min(sc, (road.width*1.22)/V.hgt), .5, 1.4);
 }
 
 function drawCar(t){
   const p = pointAt(car.s);
   const scale = vehicleScale();
+  const c = Math.cos(car.angle);
+  if(c < -0.12) car.flip = true;
+  else if(c > 0.12) car.flip = false;
+  spin = car.s / (V.hgt*0.24*scale);
   ctx.save();
   ctx.translate(p.x, p.y);
   ctx.rotate(car.angle);
+  if(car.flip) ctx.scale(1, -1);
   ctx.scale(scale, scale);
   drawVehicle(ctx, vkey, t);
   ctx.restore();
+  spin = 0;
 }
 
 /* -------------------------------------------------------------- popups */
@@ -1100,9 +1171,8 @@ function buildPicker(){
     const g = c.getContext("2d");
     g.setTransform(2,0,0,2,0,0);
     g.save();
-    g.translate(60, 37);
-    g.rotate(-Math.PI/2);
-    const sc = 66 / v.len;
+    g.translate(60, 40);
+    const sc = Math.min(112/v.len, 62/v.hgt);
     g.scale(sc, sc);
     drawVehicle(g, key, 0);
     g.restore();
