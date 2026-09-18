@@ -1,0 +1,1155 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>くるまでおでかけ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#bfe6a8;
+    --panel:#fffdf6;
+    --ink:#3b3227;
+    --ink-soft:#7a6a55;
+    --line:#e6d9bf;
+    --accent:#ff8a3d;
+    --accent-ink:#ffffff;
+    --shadow:rgba(80,60,30,.22);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#2b3b2c;
+      --panel:#33302b;
+      --ink:#f6efe2;
+      --ink-soft:#c3b59c;
+      --line:#4a453c;
+      --shadow:rgba(0,0,0,.45);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#2b3b2c; --panel:#33302b; --ink:#f6efe2; --ink-soft:#c3b59c;
+    --line:#4a453c; --shadow:rgba(0,0,0,.45);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"M PLUS Rounded 1c","Hiragino Maru Gothic ProN","ヒラギノ丸ゴ ProN W4",system-ui,-apple-system,"Segoe UI",sans-serif;
+    font-weight:800;
+    overflow:hidden;
+    touch-action:none;
+    overscroll-behavior:none;
+  }
+  canvas#stage{display:block;width:100%;height:100%;touch-action:none}
+
+  .overlay{
+    position:fixed;inset:0;z-index:2;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:clamp(14px,3vh,26px);
+    padding:max(18px,env(safe-area-inset-top)) 18px max(18px,env(safe-area-inset-bottom));
+    background:var(--bg);
+  }
+  .overlay[hidden]{display:none}
+
+  .title{
+    margin:0;
+    font-size:clamp(26px,7vw,44px);
+    letter-spacing:.04em;
+    text-shadow:0 3px 0 var(--shadow);
+  }
+  .sub{margin:-6px 0 0;font-size:clamp(14px,3.4vw,19px);color:var(--ink-soft);font-weight:700}
+
+  .picker{
+    display:grid;gap:clamp(10px,2.4vw,18px);
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    width:min(680px,100%);
+  }
+  @media (min-width:760px){ .picker{grid-template-columns:repeat(4,minmax(0,1fr))} }
+
+  .card{
+    appearance:none;border:0;cursor:pointer;
+    background:var(--panel);
+    border-radius:26px;
+    padding:14px 10px 12px;
+    display:flex;flex-direction:column;align-items:center;gap:6px;
+    box-shadow:0 6px 0 var(--shadow);
+    font:inherit;color:var(--ink);
+    transition:transform .12s ease, box-shadow .12s ease;
+  }
+  .card:active{transform:translateY(5px);box-shadow:0 1px 0 var(--shadow)}
+  .card:focus-visible{outline:4px solid var(--accent);outline-offset:3px}
+  .card canvas{width:120px;height:74px;max-width:100%}
+  .card .name{font-size:clamp(15px,3.6vw,20px)}
+  .card .goal{font-size:clamp(11px,2.8vw,14px);color:var(--ink-soft);font-weight:700}
+
+  .btn{
+    appearance:none;border:0;cursor:pointer;font:inherit;
+    background:var(--accent);color:var(--accent-ink);
+    border-radius:999px;
+    padding:14px 30px;
+    font-size:clamp(16px,4vw,22px);
+    box-shadow:0 5px 0 var(--shadow);
+  }
+  .btn.ghost{background:var(--panel);color:var(--ink)}
+  .btn:active{transform:translateY(4px);box-shadow:0 1px 0 var(--shadow)}
+  .btn:focus-visible{outline:4px solid var(--ink);outline-offset:3px}
+
+  .toprow{
+    position:fixed;z-index:6;
+    top:max(10px,env(safe-area-inset-top));
+    left:max(10px,env(safe-area-inset-left));
+    display:flex;gap:8px;
+  }
+  .tbtn{
+    padding:10px 18px;font-size:16px;
+    background:var(--panel);color:var(--ink);
+    border:0;border-radius:999px;box-shadow:0 4px 0 var(--shadow);
+    font-family:inherit;font-weight:800;cursor:pointer;
+    text-decoration:none;display:inline-block;line-height:1.2;
+  }
+  .tbtn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--shadow)}
+  .tbtn:focus-visible{outline:4px solid var(--accent);outline-offset:3px}
+  .tbtn[hidden]{display:none}
+  #toast{
+    position:fixed;z-index:7;left:50%;transform:translateX(-50%);
+    top:max(64px,calc(env(safe-area-inset-top) + 64px));
+    background:var(--panel);color:var(--ink);
+    padding:10px 20px;border-radius:999px;font-size:15px;
+    box-shadow:0 4px 0 var(--shadow);pointer-events:none;
+  }
+  #toast[hidden]{display:none}
+
+  #goal .card-panel{
+    background:var(--panel);
+    border-radius:32px;
+    padding:clamp(22px,5vw,38px);
+    text-align:center;
+    display:flex;flex-direction:column;align-items:center;gap:18px;
+    box-shadow:0 8px 0 var(--shadow);
+    max-width:min(520px,92vw);
+  }
+  #goalText{margin:0;font-size:clamp(24px,6vw,36px)}
+  #goalSub{margin:0;font-size:clamp(14px,3.6vw,18px);color:var(--ink-soft);font-weight:700}
+  .row{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+
+  .hint{
+    position:fixed;left:50%;transform:translateX(-50%);
+    bottom:max(14px,env(safe-area-inset-bottom));
+    background:var(--panel);color:var(--ink);
+    padding:9px 20px;border-radius:999px;font-size:15px;
+    box-shadow:0 4px 0 var(--shadow);
+    pointer-events:none;
+  }
+  .hint[hidden]{display:none}
+  @media (prefers-reduced-motion:reduce){ .card,.btn{transition:none} }
+</style>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div class="toprow">
+  <a id="home" class="tbtn" href="./">メニュー</a>
+  <button id="back" class="tbtn" type="button" hidden>もどる</button>
+  <button id="voice" class="tbtn" type="button" aria-label="こえ">🔊 こえ</button>
+</div>
+<div id="toast" hidden></div>
+<div id="hint" class="hint" hidden>くるまを ゆびで ひっぱってね</div>
+
+<div id="select" class="overlay">
+  <h1 class="title">くるまで おでかけ</h1>
+  <p class="sub">すきな くるまを えらんでね</p>
+  <div id="picker" class="picker"></div>
+</div>
+
+<div id="goal" class="overlay" hidden style="background:transparent;backdrop-filter:blur(2px)">
+  <div class="card-panel">
+    <h2 id="goalText">とうちゃく！</h2>
+    <p id="goalSub"></p>
+    <div class="row">
+      <button class="btn" id="again">もういちど</button>
+      <button class="btn ghost" id="other">ほかの くるま</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------------------------------------------------------------- data */
+const VEHICLES = {
+  car: {
+    name:"じどうしゃ", goalName:"スーパー", dest:"market",
+    body:"#e8483c", dark:"#c2372d", light:"#ff7a6e", len:74, wid:38,
+    goalLine:"かいものに とうちゃく！", trail:"#ff8f6b"
+  },
+  fire: {
+    name:"しょうぼうしゃ", goalName:"かじの おうち", dest:"fire",
+    body:"#d9261c", dark:"#a81c14", light:"#ff6a5e", len:96, wid:40,
+    goalLine:"かじを けしました！", trail:"#ffb04d"
+  },
+  ambulance: {
+    name:"きゅうきゅうしゃ", goalName:"びょういん", dest:"hospital",
+    body:"#f7f4ee", dark:"#cfc8bb", light:"#ffffff", len:92, wid:40,
+    goalLine:"びょういんに とうちゃく！", trail:"#6fd0e8"
+  },
+  police: {
+    name:"パトカー", goalName:"けいさつしょ", dest:"police",
+    body:"#f3f0ea", dark:"#1f2838", light:"#ffffff", len:80, wid:38,
+    goalLine:"パトロール かんりょう！", trail:"#6aa6ff"
+  }
+};
+
+const PAL = {
+  grass:"#8fd06f", grass2:"#7cc25e",
+  road:"#6d6a66", roadEdge:"#55524e", line:"#fdf6e3",
+  sign:"#3b6fd4", signDone:"#f7b32b", pole:"#9aa3ad",
+  ink:"#3b3227"
+};
+
+/* ------------------------------------------------------------- helpers */
+const stage = document.getElementById("stage");
+const ctx = stage.getContext("2d");
+const selectEl = document.getElementById("select");
+const goalEl = document.getElementById("goal");
+const backEl = document.getElementById("back");
+const hintEl = document.getElementById("hint");
+const toastEl = document.getElementById("toast");
+const homeEl = document.getElementById("home");
+const voiceEl = document.getElementById("voice");
+const clamp = (v,a,b)=>v<a?a:(v>b?b:v);
+const lerp = (a,b,t)=>a+(b-a)*t;
+const rnd = (a,b)=>a+Math.random()*(b-a);
+
+function roundRect(g,x,y,w,h,r){
+  r = Math.min(r, Math.abs(w)/2, Math.abs(h)/2);
+  g.beginPath();
+  g.moveTo(x+r,y);
+  g.arcTo(x+w,y,x+w,y+h,r);
+  g.arcTo(x+w,y+h,x,y+h,r);
+  g.arcTo(x,y+h,x,y,r);
+  g.arcTo(x,y,x+w,y,r);
+  g.closePath();
+}
+
+/* --------------------------------------------------------------- audio */
+let ac = null;
+function audio(){
+  if(!ac){
+    const C = window.AudioContext || window.webkitAudioContext;
+    if(!C) return null;
+    ac = new C();
+  }
+  if(ac.state === "suspended") ac.resume();
+  return ac;
+}
+function note(freq, at, dur, type="triangle", vol=.22){
+  const a = audio(); if(!a) return;
+  const t0 = a.currentTime + at;
+  const o = a.createOscillator(), g = a.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t0);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(vol, t0+0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+  o.connect(g); g.connect(a.destination);
+  o.start(t0); o.stop(t0+dur+0.05);
+}
+/* 数字の読み上げ（iPadは端末の音量に従うので、音量は最大の1.0で出す） */
+const KANA = ["ゼロ","いち","に","さん","よん","ご","ろく","なな","はち","きゅう","じゅう",
+              "じゅういち","じゅうに","じゅうさん","じゅうよん","じゅうご","じゅうろく"];
+let voiceOn = true, jaVoice = null, speechReady = false;
+function pickVoice(){
+  if(!("speechSynthesis" in window)) return;
+  const list = speechSynthesis.getVoices() || [];
+  jaVoice = list.find(v => /^ja/i.test(v.lang) && /kyoko|o-ren|siri/i.test(v.name))
+         || list.find(v => /^ja/i.test(v.lang))
+         || null;
+}
+if("speechSynthesis" in window){
+  pickVoice();
+  speechSynthesis.addEventListener && speechSynthesis.addEventListener("voiceschanged", pickVoice);
+}
+function unlockSpeech(){
+  if(speechReady || !("speechSynthesis" in window)) return;
+  speechReady = true;
+  pickVoice();
+  const u = new SpeechSynthesisUtterance(" ");
+  u.volume = 0; u.lang = "ja-JP";
+  try{ speechSynthesis.speak(u); }catch(e){ speechReady = false; }
+}
+function say(text){
+  if(!voiceOn || !("speechSynthesis" in window)) return;
+  try{
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "ja-JP";
+    if(jaVoice) u.voice = jaVoice;
+    u.volume = 1; u.rate = 0.95; u.pitch = 1.15;
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+
+const SCALE = [0,2,4,7,9,12,14,16,19,21,24,26];
+function signSound(n){
+  const semi = SCALE[(n-1) % SCALE.length] + 12*Math.floor((n-1)/SCALE.length);
+  const f = 392 * Math.pow(2, semi/12);
+  note(f, 0, .16, "triangle", .16);
+  note(f*2, .06, .18, "sine", .08);
+}
+function fanfare(){
+  [0,4,7,12,12].forEach((s,i)=>{
+    note(440*Math.pow(2,s/12), i*0.13, .35, "triangle", .22);
+    note(220*Math.pow(2,s/12), i*0.13, .35, "sine", .12);
+  });
+  note(440*Math.pow(2,16/12), .66, .7, "triangle", .2);
+}
+function siren(){
+  note(660,0,.2,"square",.08); note(520,.2,.2,"square",.08);
+  note(660,.4,.2,"square",.08); note(520,.6,.25,"square",.08);
+}
+function horn(){
+  note(392,0,.16,"square",.09); note(494,.18,.22,"square",.09);
+}
+
+/* ---------------------------------------------------------------- state */
+let W=0, H=0, DPR=1;
+let mode = "select";
+let vkey = "car", V = VEHICLES.car;
+let road = null;          // {pts, samples, step, total, width}
+let signs = [], decor = [], particles = [], popups = [], confetti = [];
+let car = { s:0, target:0, angle:0, drag:false, idx:0 };
+let arrived = false, arriveTime = 0, fireOut = 0;
+let started = false;
+let t0 = performance.now();
+
+/* ----------------------------------------------------------- road build */
+function cr(p0,p1,p2,p3,t){
+  const t2=t*t, t3=t2*t;
+  return {
+    x: .5*((2*p1.x)+(-p0.x+p2.x)*t+(2*p0.x-5*p1.x+4*p2.x-p3.x)*t2+(-p0.x+3*p1.x-3*p2.x+p3.x)*t3),
+    y: .5*((2*p1.y)+(-p0.y+p2.y)*t+(2*p0.y-5*p1.y+4*p2.y-p3.y)*t2+(-p0.y+3*p1.y-3*p2.y+p3.y)*t3)
+  };
+}
+
+function buildRoad(){
+  const width = clamp(Math.min(W,H)*0.09, 46, 68);
+  const padX = clamp(W*0.17, width*1.5, 190);
+  const top = H*0.17, bottom = H*0.83;
+  const rows = clamp(Math.round(H/210), 3, 5);
+  const gap = (bottom-top)/(rows-1);
+  const bulge = Math.min(58, padX*0.5);
+  const pts = [];
+  for(let r=0;r<rows;r++){
+    const y = top + r*gap;
+    const wob = (r%2===0 ? 1 : -1) * Math.min(gap*0.22, (W*0.5 - padX)*0.26);
+    const xs = (r%2===0) ? [padX, W*0.5, W-padX] : [W-padX, W*0.5, padX];
+    pts.push({x:xs[0], y:y});
+    pts.push({x:xs[1], y:y+wob});
+    pts.push({x:xs[2], y:y});
+    if(r < rows-1){ // round out the hairpin so the road turns gently
+      pts.push({x: xs[2] + (r%2===0 ? bulge : -bulge), y: y + gap*0.5});
+    }
+  }
+  // duplicate ends for catmull-rom
+  const P = [pts[0], ...pts, pts[pts.length-1]];
+  const raw = [];
+  for(let i=0;i<P.length-3;i++){
+    const div = 34;
+    for(let j=0;j<div;j++){
+      raw.push(cr(P[i],P[i+1],P[i+2],P[i+3], j/div));
+    }
+  }
+  raw.push(P[P.length-2]);
+
+  // resample uniformly
+  const step = 4;
+  const samples = [{x:raw[0].x, y:raw[0].y, s:0}];
+  let carry = 0;
+  for(let i=1;i<raw.length;i++){
+    let ax = raw[i-1].x, ay = raw[i-1].y;
+    const bx = raw[i].x, by = raw[i].y;
+    let seg = Math.hypot(bx-ax, by-ay);
+    while(carry + seg >= step){
+      const need = step - carry;
+      const k = need/seg;
+      const nx = ax + (bx-ax)*k, ny = ay + (by-ay)*k;
+      samples.push({x:nx, y:ny, s:samples.length*step});
+      ax = nx; ay = ny;
+      seg = Math.hypot(bx-ax, by-ay);
+      carry = 0;
+    }
+    carry += seg;
+  }
+  const total = (samples.length-1)*step;
+
+  // keep road on screen
+  const half = width/2 + 6;
+  for(const p of samples){
+    p.x = clamp(p.x, half, W-half);
+    p.y = clamp(p.y, half+6, H-half-6);
+  }
+  // tightest turn radius, used to size the vehicle so it never cuts a corner
+  let rmin = 1e9;
+  for(let i=8;i<samples.length-8;i++){
+    const a = Math.atan2(samples[i].y-samples[i-6].y, samples[i].x-samples[i-6].x);
+    const b = Math.atan2(samples[i+6].y-samples[i].y, samples[i+6].x-samples[i].x);
+    let d = Math.abs(b-a);
+    if(d > Math.PI) d = Math.PI*2-d;
+    if(d > 1e-4) rmin = Math.min(rmin, (6*step)/d);
+  }
+  road = {samples, step, total, width, rmin: Math.min(rmin, 4000)};
+}
+
+function pointAt(s){
+  const i = clamp(Math.round(s/road.step), 0, road.samples.length-1);
+  return road.samples[i];
+}
+function angleAt(s){
+  const n = road.samples.length;
+  const i = clamp(Math.round(s/road.step), 0, n-1);
+  const a = road.samples[clamp(i-3,0,n-1)], b = road.samples[clamp(i+3,0,n-1)];
+  return Math.atan2(b.y-a.y, b.x-a.x);
+}
+
+function sgScale(){ return clamp(road.width/66, .72, 1.1); }
+
+function buildSigns(){
+  signs = [];
+  const N = clamp(Math.round(road.total/210), 5, 8);
+  const half = road.width/2;
+  for(let i=1;i<=N;i++){
+    const s = road.total * (0.075 + 0.85*(i-0.5)/N);
+    const p = pointAt(s), ang = angleAt(s);
+    const off = half + 26*sgScale();
+    const cands = [
+      {x:p.x + Math.cos(ang+Math.PI/2)*off, y:p.y + Math.sin(ang+Math.PI/2)*off},
+      {x:p.x + Math.cos(ang-Math.PI/2)*off, y:p.y + Math.sin(ang-Math.PI/2)*off}
+    ];
+    let best = cands[0], bestScore = -1;
+    for(const c of cands){
+      if(c.x < 34 || c.x > W-34 || c.y < 60 || c.y > H-40) continue;
+      let dmin = 1e9;
+      for(let k=0;k<road.samples.length;k+=6){
+        if(Math.abs(road.samples[k].s - s) < 90) continue;
+        const d = Math.hypot(road.samples[k].x-c.x, road.samples[k].y-c.y);
+        if(d < dmin) dmin = d;
+      }
+      for(const other of signs){
+        dmin = Math.min(dmin, Math.hypot(other.x-c.x, other.y-c.y));
+      }
+      if(dmin > bestScore){ bestScore = dmin; best = c; }
+    }
+    signs.push({n:i, s, x:best.x, y:best.y, base:{x:p.x,y:p.y}, passed:false, pop:0});
+  }
+}
+
+function buildDecor(){
+  decor = [];
+  const keep = road.width/2 + 54;
+  const end = road.samples[road.samples.length-1];
+  const start = road.samples[0];
+  let guard = 0;
+  while(decor.length < Math.round((W*H)/42000) && guard++ < 900){
+    const x = rnd(26, W-26), y = rnd(70, H-30);
+    let ok = true;
+    for(let k=0;k<road.samples.length;k+=5){
+      if(Math.hypot(road.samples[k].x-x, road.samples[k].y-y) < keep){ ok=false; break; }
+    }
+    if(ok) for(const sg of signs){ if(Math.hypot(sg.x-x, sg.y-y) < 52){ ok=false; break; } }
+    if(ok && Math.hypot(end.x-x, end.y-y) < 130) ok = false;
+    if(ok && Math.hypot(start.x-x, start.y-y) < 80) ok = false;
+    if(ok) decor.push({x,y, k: Math.random()<0.62 ? "tree" : (Math.random()<0.5?"bush":"flower"), r: rnd(.85,1.25), ph: rnd(0,6.3)});
+  }
+}
+
+function startLevel(key){
+  vkey = key; V = VEHICLES[key];
+  buildRoad(); buildSigns(); buildDecor();
+  car.s = 0; car.target = 0; car.angle = angleAt(0); car.drag = false;
+  particles = []; popups = []; confetti = [];
+  arrived = false; arriveTime = 0; fireOut = 0; started = false;
+  mode = "play";
+  selectEl.hidden = true; goalEl.hidden = true; backEl.hidden = false;
+  hintEl.hidden = false;
+  key === "car" ? horn() : siren();
+}
+
+/* ------------------------------------------------------------ interaction */
+function toLocal(e){
+  const r = stage.getBoundingClientRect();
+  return {x: e.clientX - r.left, y: e.clientY - r.top};
+}
+function grab(e){
+  if(mode !== "play" || arrived) return;
+  audio(); unlockSpeech();
+  const p = toLocal(e);
+  const c = pointAt(car.s);
+  const near = Math.hypot(p.x-c.x, p.y-c.y);
+  const windowPx = near < road.width*2.6 ? 260 : 150;
+  car.drag = true;
+  started = true; hintEl.hidden = true;
+  moveTo(p, windowPx);
+  stage.setPointerCapture && stage.setPointerCapture(e.pointerId);
+}
+function moveTo(p, windowPx=240){
+  const n = road.samples.length;
+  const ci = clamp(Math.round(car.target/road.step), 0, n-1);
+  const w = Math.round(windowPx/road.step);
+  let best = ci, bd = 1e9;
+  for(let i=Math.max(0,ci-w); i<=Math.min(n-1, ci+w); i++){
+    const d = (road.samples[i].x-p.x)**2 + (road.samples[i].y-p.y)**2;
+    if(d < bd){ bd = d; best = i; }
+  }
+  car.target = best*road.step;
+}
+stage.addEventListener("pointerdown", grab);
+stage.addEventListener("pointermove", e => { if(car.drag){ e.preventDefault(); moveTo(toLocal(e)); } }, {passive:false});
+["pointerup","pointercancel"].forEach(t =>
+  stage.addEventListener(t, () => { car.drag = false; })
+);
+
+/* -------------------------------------------------------------- effects */
+function burst(x,y,color,count=18){
+  for(let i=0;i<count;i++){
+    const a = rnd(0,Math.PI*2), sp = rnd(50,220);
+    particles.push({x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-60, life:1, size:rnd(4,9),
+      color, star: Math.random()<.5});
+  }
+}
+function waterSpray(x,y){
+  for(let i=0;i<4;i++){
+    const a = rnd(-Math.PI*0.9, -Math.PI*0.25);
+    particles.push({x,y, vx:Math.cos(a)*rnd(120,260), vy:Math.sin(a)*rnd(120,260), life:1,
+      size:rnd(3,7), color:"#6fd0e8", star:false});
+  }
+}
+function celebrate(){
+  const p = pointAt(road.total);
+  for(let i=0;i<90;i++){
+    confetti.push({x:rnd(0,W), y:rnd(-H*0.5,0), vy:rnd(90,220), vx:rnd(-40,40),
+      w:rnd(7,13), h:rnd(9,16), rot:rnd(0,6.3), vr:rnd(-4,4),
+      c:["#ff6b6b","#ffd166","#5ad2a0","#5aa9ff","#c88bff"][i%5]});
+  }
+  burst(p.x, p.y, "#ffd166", 34);
+  fanfare();
+}
+
+/* --------------------------------------------------------------- update */
+function update(dt){
+  if(mode === "play"){
+    const prev = car.s;
+    car.s = lerp(car.s, car.target, 1 - Math.pow(0.0016, dt));
+    if(Math.abs(car.target - car.s) < 0.4) car.s = car.target;
+    car.s = clamp(car.s, 0, road.total);
+    const a = angleAt(car.s);
+    let d = a - car.angle;
+    while(d > Math.PI) d -= Math.PI*2;
+    while(d < -Math.PI) d += Math.PI*2;
+    car.angle += d * clamp(dt*14, 0, 1);
+
+    if(car.s > prev){
+      for(const sg of signs){
+        if(!sg.passed && sg.s > prev - 1 && sg.s <= car.s){
+          sg.passed = true; sg.pop = 1;
+          signSound(sg.n);
+          say(KANA[sg.n] || String(sg.n));
+          burst(sg.x, sg.y, PAL.signDone, 20);
+          popups.push({n:sg.n, x:sg.x, y:sg.y, life:1});
+        }
+      }
+    }
+    if(!arrived && car.s >= road.total - 3){
+      arrived = true; arriveTime = 0; car.drag = false;
+      celebrate();
+    }
+  }
+
+  if(arrived){
+    arriveTime += dt;
+    if(vkey === "fire"){
+      fireOut = clamp(fireOut + dt*0.9, 0, 1);
+      if(fireOut < 1 && Math.random() < 0.6){
+        const c = pointAt(road.total);
+        waterSpray(c.x, c.y - 10);
+      }
+    }
+    if(arriveTime > 1.3 && goalEl.hidden){
+      goalEl.hidden = false;
+      document.getElementById("goalSub").textContent = V.goalLine;
+    }
+  }
+
+  for(let i=particles.length-1;i>=0;i--){
+    const p = particles[i];
+    p.x += p.vx*dt; p.y += p.vy*dt; p.vy += 420*dt;
+    p.life -= dt*1.5;
+    if(p.life <= 0) particles.splice(i,1);
+  }
+  for(let i=popups.length-1;i>=0;i--){
+    popups[i].life -= dt*0.75;
+    popups[i].y -= 44*dt;
+    if(popups[i].life <= 0) popups.splice(i,1);
+  }
+  for(let i=confetti.length-1;i>=0;i--){
+    const c = confetti[i];
+    c.y += c.vy*dt; c.x += Math.sin(c.y*0.02)*24*dt + c.vx*dt; c.rot += c.vr*dt;
+    if(c.y > H+40) confetti.splice(i,1);
+  }
+  for(const sg of signs) if(sg.pop > 0) sg.pop = Math.max(0, sg.pop - dt*1.6);
+}
+
+/* ---------------------------------------------------------------- draw */
+function drawBackground(t){
+  ctx.fillStyle = PAL.grass;
+  ctx.fillRect(0,0,W,H);
+  ctx.fillStyle = PAL.grass2;
+  for(let y=-40; y<H+40; y+=46){
+    for(let x=-40; x<W+40; x+=92){
+      ctx.beginPath();
+      ctx.ellipse(x + (y/46%2?46:0), y, 26, 9, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+}
+
+function drawDecor(t){
+  for(const d of decor){
+    const sway = Math.sin(t*1.2 + d.ph)*2;
+    ctx.save();
+    ctx.translate(d.x, d.y);
+    ctx.scale(d.r, d.r);
+    ctx.fillStyle = "rgba(60,80,40,.18)";
+    ctx.beginPath(); ctx.ellipse(0, 4, 18, 6, 0, 0, Math.PI*2); ctx.fill();
+    if(d.k === "tree"){
+      ctx.fillStyle = "#8a5a37";
+      roundRect(ctx, -4, -12, 8, 16, 3); ctx.fill();
+      ctx.fillStyle = "#3f9e56";
+      ctx.beginPath(); ctx.arc(sway, -26, 17, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "#4fb86a";
+      ctx.beginPath(); ctx.arc(sway-6, -31, 11, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sway+8, -24, 10, 0, Math.PI*2); ctx.fill();
+    } else if(d.k === "bush"){
+      ctx.fillStyle = "#57b262";
+      ctx.beginPath(); ctx.arc(-8,-4,10,0,Math.PI*2); ctx.arc(6,-6,12,0,Math.PI*2); ctx.arc(0,0,11,0,Math.PI*2); ctx.fill();
+    } else {
+      ctx.fillStyle = "#57b262";
+      roundRect(ctx, -1.5, -10, 3, 12, 1.5); ctx.fill();
+      const cols = ["#ff8fb1","#ffd166","#fff3f6","#c88bff"];
+      ctx.fillStyle = cols[Math.floor(d.ph)%cols.length];
+      for(let i=0;i<5;i++){
+        const a = i/5*Math.PI*2 + sway*0.06;
+        ctx.beginPath(); ctx.arc(Math.cos(a)*5, -12+Math.sin(a)*5, 4, 0, Math.PI*2); ctx.fill();
+      }
+      ctx.fillStyle = "#ffd166";
+      ctx.beginPath(); ctx.arc(0,-12,3,0,Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+function strokePath(from, to, width, color, cap="round"){
+  const a = clamp(Math.round(from/road.step), 0, road.samples.length-1);
+  const b = clamp(Math.round(to/road.step), 0, road.samples.length-1);
+  if(b <= a) return;
+  ctx.beginPath();
+  ctx.moveTo(road.samples[a].x, road.samples[a].y);
+  for(let i=a+1;i<=b;i++) ctx.lineTo(road.samples[i].x, road.samples[i].y);
+  ctx.lineWidth = width; ctx.strokeStyle = color;
+  ctx.lineCap = cap; ctx.lineJoin = "round";
+  ctx.stroke();
+}
+
+function drawRoad(){
+  const w = road.width;
+  strokePath(0, road.total, w+10, PAL.roadEdge);
+  strokePath(0, road.total, w, PAL.road);
+  ctx.save();
+  ctx.setLineDash([16, 18]);
+  strokePath(0, road.total, 4, "rgba(253,246,227,.75)", "butt");
+  ctx.restore();
+}
+
+function drawTrail(){
+  if(car.s < 4) return;
+  ctx.save();
+  ctx.globalAlpha = .55;
+  strokePath(0, car.s, road.width - 12, V.trail);
+  ctx.globalAlpha = .8;
+  ctx.restore();
+  // tyre tracks
+  const a = 0, b = clamp(Math.round(car.s/road.step), 0, road.samples.length-1);
+  for(const side of [-1, 1]){
+    ctx.beginPath();
+    for(let i=a;i<=b;i++){
+      const p = road.samples[i];
+      const an = angleAt(p.s);
+      const x = p.x + Math.cos(an+Math.PI/2)*side*(road.width*0.22);
+      const y = p.y + Math.sin(an+Math.PI/2)*side*(road.width*0.22);
+      i===a ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    }
+    ctx.lineWidth = 4; ctx.strokeStyle = "rgba(60,45,30,.35)"; ctx.lineCap="round";
+    ctx.stroke();
+  }
+}
+
+function drawStart(){
+  const p = road.samples[0];
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.fillStyle = "rgba(60,80,40,.2)";
+  ctx.beginPath(); ctx.ellipse(0, 26, 20, 7, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = "#8a5a37";
+  roundRect(ctx, -2, -16, 4, 42, 2); ctx.fill();
+  ctx.fillStyle = "#5ad2a0";
+  ctx.beginPath(); ctx.moveTo(2,-18); ctx.lineTo(34,-8); ctx.lineTo(2,2); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#12432f";
+  ctx.font = "700 11px 'M PLUS Rounded 1c', sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("スタート", 16, -8);
+  ctx.restore();
+}
+
+/* ------------------------------------------------------------ buildings */
+function drawDestination(t){
+  const p = road.samples[road.samples.length-1];
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  const s = clamp(Math.min(W,H)/620, .78, 1.25);
+  ctx.scale(s, s);
+  ctx.fillStyle = "rgba(60,80,40,.22)";
+  ctx.beginPath(); ctx.ellipse(0, 42, 74, 15, 0, 0, Math.PI*2); ctx.fill();
+  const kind = V.dest;
+  if(kind === "market") drawMarket(t);
+  else if(kind === "fire") drawBurningHouse(t);
+  else if(kind === "hospital") drawHospital(t);
+  else drawPolice(t);
+  ctx.restore();
+}
+
+function label(text, y, color="#3b3227", size=15){
+  ctx.fillStyle = color;
+  ctx.font = `800 ${size}px 'M PLUS Rounded 1c', sans-serif`;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(text, 0, y);
+}
+
+function drawMarket(t){
+  ctx.fillStyle = "#fff6e2";
+  roundRect(ctx, -68, -78, 136, 118, 12); ctx.fill();
+  ctx.fillStyle = "#ffcf5c";
+  roundRect(ctx, -74, -92, 148, 22, 8); ctx.fill();
+  label("スーパー", -81, "#7a4b12", 17);
+  // awning
+  for(let i=0;i<7;i++){
+    ctx.fillStyle = i%2 ? "#ff8a3d" : "#fff6e2";
+    ctx.beginPath();
+    ctx.moveTo(-70+i*20, -64); ctx.lineTo(-50+i*20, -64);
+    ctx.lineTo(-54+i*20, -46); ctx.lineTo(-74+i*20+4, -46);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle = "#bfe4ef";
+  roundRect(ctx, -58, -40, 44, 34, 5); ctx.fill();
+  roundRect(ctx, 14, -40, 44, 34, 5); ctx.fill();
+  ctx.fillStyle = "#6fa3b8";
+  roundRect(ctx, -12, -34, 24, 74, 4); ctx.fill();
+  // cart
+  ctx.strokeStyle = "#8a8f96"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(38,18); ctx.lineTo(56,18); ctx.lineTo(52,32); ctx.lineTo(40,32); ctx.closePath(); ctx.stroke();
+  ctx.fillStyle = "#4a4f55";
+  ctx.beginPath(); ctx.arc(42,37,3.5,0,Math.PI*2); ctx.arc(52,37,3.5,0,Math.PI*2); ctx.fill();
+}
+
+function houseShell(roof="#7a5a44", wall="#fff0dc"){
+  ctx.fillStyle = wall;
+  roundRect(ctx, -58, -52, 116, 92, 10); ctx.fill();
+  ctx.fillStyle = roof;
+  ctx.beginPath();
+  ctx.moveTo(-70,-50); ctx.lineTo(0,-96); ctx.lineTo(70,-50); ctx.closePath(); ctx.fill();
+}
+
+function drawBurningHouse(t){
+  houseShell("#a4593f", "#fff1de");
+  const out = fireOut;
+  // windows
+  const happy = out > .6;
+  ctx.fillStyle = happy ? "#bfe4ef" : "#ffd27a";
+  roundRect(ctx, -46, -36, 34, 28, 5); ctx.fill();
+  roundRect(ctx, 12, -36, 34, 28, 5); ctx.fill();
+  ctx.fillStyle = "#7a5a44";
+  roundRect(ctx, -16, -6, 32, 46, 5); ctx.fill();
+  ctx.fillStyle = "#ffd166";
+  ctx.beginPath(); ctx.arc(9, 18, 3, 0, Math.PI*2); ctx.fill();
+  if(happy){
+    ctx.strokeStyle = "#3b3227"; ctx.lineWidth = 2.5; ctx.lineCap="round";
+    ctx.beginPath(); ctx.arc(-29,-22,8,.15*Math.PI,.85*Math.PI); ctx.stroke();
+    ctx.beginPath(); ctx.arc(29,-22,8,.15*Math.PI,.85*Math.PI); ctx.stroke();
+  }
+  if(out < 1){
+    const a = 1 - out;
+    ctx.save();
+    ctx.globalAlpha = a;
+    // smoke
+    for(let i=0;i<4;i++){
+      const ph = t*0.8 + i*1.6;
+      const y = -100 - ((ph*22)%64);
+      ctx.fillStyle = "rgba(120,120,125,.35)";
+      ctx.beginPath(); ctx.arc(Math.sin(ph)*16 - 6, y, 12 + (i*2), 0, Math.PI*2); ctx.fill();
+    }
+    // flames on roof
+    for(let i=0;i<3;i++){
+      const bx = -30 + i*30;
+      const f = 1 + Math.sin(t*9 + i*2)*0.16;
+      ctx.save();
+      ctx.translate(bx, -66 + i%2*6);
+      ctx.scale(f, f*1.12);
+      ctx.fillStyle = "#ff6b2c";
+      ctx.beginPath();
+      ctx.moveTo(0,-34); ctx.quadraticCurveTo(17,-12, 10,2);
+      ctx.quadraticCurveTo(4,10, -10,2); ctx.quadraticCurveTo(-17,-12, 0,-34);
+      ctx.fill();
+      ctx.fillStyle = "#ffd166";
+      ctx.beginPath();
+      ctx.moveTo(0,-20); ctx.quadraticCurveTo(9,-8, 5,1);
+      ctx.quadraticCurveTo(0,6, -5,1); ctx.quadraticCurveTo(-9,-8, 0,-20);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+}
+
+function drawHospital(t){
+  ctx.fillStyle = "#fbfcfd";
+  roundRect(ctx, -64, -80, 128, 120, 12); ctx.fill();
+  ctx.fillStyle = "#6fb6d8";
+  roundRect(ctx, -72, -94, 144, 20, 8); ctx.fill();
+  ctx.fillStyle = "#e8483c";
+  roundRect(ctx, -8, -68, 16, 44, 3); ctx.fill();
+  roundRect(ctx, -22, -54, 44, 16, 3); ctx.fill();
+  ctx.fillStyle = "#cfe8f4";
+  for(let i=0;i<3;i++){ roundRect(ctx, -54+i*40, -18, 28, 22, 4); ctx.fill(); }
+  ctx.fillStyle = "#9fc9dd";
+  roundRect(ctx, -18, 8, 36, 32, 4); ctx.fill();
+  label("びょういん", -84, "#123a4d", 15);
+}
+
+function drawPolice(t){
+  ctx.fillStyle = "#eef1f6";
+  roundRect(ctx, -64, -78, 128, 118, 12); ctx.fill();
+  ctx.fillStyle = "#31508f";
+  roundRect(ctx, -72, -92, 144, 20, 8); ctx.fill();
+  label("けいさつ", -82, "#ffffff", 15);
+  // badge
+  ctx.fillStyle = "#f2c14e";
+  ctx.beginPath();
+  for(let i=0;i<10;i++){
+    const r = i%2 ? 10 : 20, a = -Math.PI/2 + i*Math.PI/5;
+    const x = Math.cos(a)*r, y = -46 + Math.sin(a)*r;
+    i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+  }
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#cfd8e8";
+  roundRect(ctx, -56, -16, 30, 24, 4); ctx.fill();
+  roundRect(ctx, 26, -16, 30, 24, 4); ctx.fill();
+  ctx.fillStyle = "#31508f";
+  roundRect(ctx, -18, -10, 36, 50, 4); ctx.fill();
+  const blink = Math.sin(t*5) > 0;
+  ctx.fillStyle = blink ? "#ff5d52" : "#6aa6ff";
+  ctx.beginPath(); ctx.arc(-58, -70, 6, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = blink ? "#6aa6ff" : "#ff5d52";
+  ctx.beginPath(); ctx.arc(58, -70, 6, 0, Math.PI*2); ctx.fill();
+}
+
+/* --------------------------------------------------------------- signs */
+function drawSigns(){
+  for(const sg of signs){
+    ctx.save();
+    ctx.translate(sg.x, sg.y);
+    const pop = (1 + Math.sin(sg.pop*Math.PI)*0.35) * sgScale();
+    ctx.fillStyle = "rgba(60,80,40,.2)";
+    ctx.beginPath(); ctx.ellipse(0, 22, 13, 5, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = PAL.pole;
+    roundRect(ctx, -3, -6, 6, 28, 3); ctx.fill();
+    ctx.scale(pop, pop);
+    ctx.fillStyle = sg.passed ? PAL.signDone : PAL.sign;
+    roundRect(ctx, -21, -30, 42, 34, 10); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,.92)";
+    roundRect(ctx, -17, -26, 34, 26, 7); ctx.fill();
+    ctx.fillStyle = sg.passed ? "#a9761a" : "#25459a";
+    ctx.font = "800 24px 'M PLUS Rounded 1c', sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(String(sg.n), 0, -12);
+    ctx.restore();
+  }
+}
+
+/* ------------------------------------------------------------ vehicles */
+function wheel(g,x,y,w,h){
+  g.fillStyle = "#2f3237";
+  roundRect(g, x, y, w, h, 3); g.fill();
+}
+function drawVehicle(g, key, t){
+  const v = VEHICLES[key];
+  const L = v.len, Wd = v.wid;
+  // shadow
+  g.fillStyle = "rgba(40,50,30,.25)";
+  roundRect(g, -L/2+4, -Wd/2+6, L, Wd, 12); g.fill();
+  // wheels
+  wheel(g, L*0.12, -Wd/2-5, 18, 7); wheel(g, L*0.12, Wd/2-2, 18, 7);
+  wheel(g, -L*0.34, -Wd/2-5, 18, 7); wheel(g, -L*0.34, Wd/2-2, 18, 7);
+  if(key === "fire"){ wheel(g, -L*0.08, -Wd/2-5, 16, 7); wheel(g, -L*0.08, Wd/2-2, 16, 7); }
+  // body
+  g.fillStyle = v.body;
+  roundRect(g, -L/2, -Wd/2, L, Wd, 11); g.fill();
+  g.strokeStyle = v.dark; g.lineWidth = 2;
+  roundRect(g, -L/2, -Wd/2, L, Wd, 11); g.stroke();
+
+  if(key === "car"){
+    g.fillStyle = "#bfe4ef";
+    roundRect(g, L*0.10, -Wd/2+4, 12, Wd-8, 4); g.fill();
+    roundRect(g, -L*0.30, -Wd/2+5, 10, Wd-10, 4); g.fill();
+    g.fillStyle = v.dark;
+    roundRect(g, -L*0.18, -Wd/2+3, 22, Wd-6, 6); g.fill();
+  }
+  if(key === "fire"){
+    g.fillStyle = "#f2f4f6";
+    roundRect(g, L*0.06, -Wd/2+4, 13, Wd-8, 4); g.fill();
+    // ladder
+    g.fillStyle = "#d8dce0";
+    roundRect(g, -L*0.46, -10, L*0.62, 4, 2); g.fill();
+    roundRect(g, -L*0.46, 6, L*0.62, 4, 2); g.fill();
+    for(let i=0;i<7;i++){ roundRect(g, -L*0.44 + i*(L*0.085), -9, 3.5, 18, 1.5); g.fill(); }
+    g.fillStyle = "#ffd166";
+    roundRect(g, -L*0.50, -Wd/2+3, 6, Wd-6, 3); g.fill();
+  }
+  if(key === "ambulance"){
+    g.fillStyle = "#bfe4ef";
+    roundRect(g, L*0.08, -Wd/2+4, 13, Wd-8, 4); g.fill();
+    g.fillStyle = "#e8483c";
+    roundRect(g, -L*0.44, -Wd/2+2, L*0.5, 5, 2); g.fill();
+    roundRect(g, -L*0.44, Wd/2-7, L*0.5, 5, 2); g.fill();
+    roundRect(g, -L*0.26, -3, 22, 6, 2); g.fill();
+    roundRect(g, -L*0.18, -11, 6, 22, 2); g.fill();
+  }
+  if(key === "police"){
+    g.fillStyle = "#bfe4ef";
+    roundRect(g, L*0.10, -Wd/2+4, 12, Wd-8, 4); g.fill();
+    g.fillStyle = "#1f2838";
+    roundRect(g, -L*0.42, -Wd/2, L*0.34, Wd, 6); g.fill();
+    g.fillStyle = "#f3f0ea";
+    g.font = "800 9px 'M PLUS Rounded 1c', sans-serif";
+    g.textAlign="center"; g.textBaseline="middle";
+    g.fillText("POLICE", -L*0.25, 0);
+  }
+  // lights
+  const blink = Math.sin(t*9) > 0;
+  if(key === "fire" || key === "ambulance" || key === "police"){
+    g.fillStyle = blink ? "#ff5d52" : "#8e2a22";
+    roundRect(g, -L*0.06, -Wd/2-4, 10, 8, 3); g.fill();
+    g.fillStyle = blink ? "#3d5fbf" : "#6aa6ff";
+    roundRect(g, -L*0.06, Wd/2-4, 10, 8, 3); g.fill();
+  }
+  // headlights
+  g.fillStyle = "#fff3c4";
+  roundRect(g, L/2-6, -Wd/2+4, 5, 7, 2); g.fill();
+  roundRect(g, L/2-6, Wd/2-11, 5, 7, 2); g.fill();
+  g.fillStyle = "#ff8f7a";
+  roundRect(g, -L/2+2, -Wd/2+4, 4, 7, 2); g.fill();
+  roundRect(g, -L/2+2, Wd/2-11, 4, 7, 2); g.fill();
+}
+
+function vehicleScale(){
+  const room = road.width/2 - 3;            // how far from the centre line we may reach
+  const a = (V.len*V.len) / (8*road.rmin);  // corner overhang on the tightest bend
+  const b = V.wid/2;
+  const sc = (-b + Math.sqrt(b*b + 4*a*room)) / (2*a);
+  return clamp(Math.min(sc, (road.width-8)/V.wid), .45, 1.25);
+}
+
+function drawCar(t){
+  const p = pointAt(car.s);
+  const scale = vehicleScale();
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(car.angle);
+  ctx.scale(scale, scale);
+  drawVehicle(ctx, vkey, t);
+  ctx.restore();
+}
+
+/* -------------------------------------------------------------- popups */
+function drawParticles(){
+  for(const p of particles){
+    ctx.save();
+    ctx.globalAlpha = clamp(p.life,0,1);
+    ctx.fillStyle = p.color;
+    if(p.star){
+      ctx.translate(p.x,p.y); ctx.rotate(p.life*5);
+      ctx.beginPath();
+      for(let i=0;i<10;i++){
+        const r = i%2 ? p.size*0.45 : p.size;
+        const a = -Math.PI/2 + i*Math.PI/5;
+        const x = Math.cos(a)*r, y = Math.sin(a)*r;
+        i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+      }
+      ctx.closePath(); ctx.fill();
+    } else {
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.size*0.6,0,Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+function drawPopups(){
+  for(const p of popups){
+    const k = 1 - p.life;
+    const scale = 1 + Math.sin(Math.min(k*4,1)*Math.PI*0.5)*1.5;
+    ctx.save();
+    ctx.globalAlpha = clamp(p.life*1.6, 0, 1);
+    ctx.translate(p.x, p.y - 44);
+    ctx.scale(scale, scale);
+    ctx.font = "800 40px 'M PLUS Rounded 1c', sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.lineWidth = 9; ctx.strokeStyle = "#fffdf6"; ctx.lineJoin = "round";
+    ctx.strokeText(String(p.n), 0, 0);
+    ctx.fillStyle = "#ff8a3d";
+    ctx.fillText(String(p.n), 0, 0);
+    ctx.restore();
+  }
+}
+
+function drawConfetti(){
+  for(const c of confetti){
+    ctx.save();
+    ctx.translate(c.x, c.y); ctx.rotate(c.rot);
+    ctx.fillStyle = c.c;
+    roundRect(ctx, -c.w/2, -c.h/2, c.w, c.h, 2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawProgress(){
+  const done = signs.filter(s=>s.passed).length;
+  const pad = 14;
+  const y = 16;
+  ctx.save();
+  ctx.font = "800 15px 'M PLUS Rounded 1c', sans-serif";
+  const txt = `${V.name} → ${V.goalName}　${done}/${signs.length}`;
+  const w = ctx.measureText(txt).width + pad*2;
+  ctx.fillStyle = "rgba(255,253,246,.9)";
+  roundRect(ctx, W - w - 12, y, w, 34, 17); ctx.fill();
+  ctx.fillStyle = PAL.ink;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(txt, W - w/2 - 12, y+17);
+  ctx.restore();
+}
+
+/* ---------------------------------------------------------------- loop */
+function frame(now){
+  const dt = Math.min(0.05, (now - t0)/1000);
+  t0 = now;
+  const t = now/1000;
+  if(mode === "play" && road){
+    update(dt);
+    drawBackground(t);
+    drawRoad();
+    drawTrail();
+    drawStart();
+    drawDecor(t);
+    drawDestination(t);
+    drawSigns();
+    drawCar(t);
+    drawParticles();
+    drawPopups();
+    drawConfetti();
+    drawProgress();
+  } else {
+    ctx.clearRect(0,0,W,H);
+  }
+  requestAnimationFrame(frame);
+}
+
+/* --------------------------------------------------------------- setup */
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+  W = stage.clientWidth; H = stage.clientHeight;
+  stage.width = Math.round(W*DPR); stage.height = Math.round(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  if(mode === "play" && road){
+    const frac = car.s / road.total;
+    const passed = signs.map(s=>s.passed);
+    buildRoad(); buildSigns(); buildDecor();
+    signs.forEach((s,i)=> s.passed = passed[i] || false);
+    car.s = car.target = frac * road.total;
+    car.angle = angleAt(car.s);
+  }
+}
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", () => setTimeout(resize, 150));
+
+function buildPicker(){
+  const picker = document.getElementById("picker");
+  for(const key of Object.keys(VEHICLES)){
+    const v = VEHICLES[key];
+    const b = document.createElement("button");
+    b.className = "card";
+    b.type = "button";
+    const c = document.createElement("canvas");
+    c.width = 240; c.height = 148;
+    const g = c.getContext("2d");
+    g.setTransform(2,0,0,2,0,0);
+    g.save();
+    g.translate(60, 37);
+    g.rotate(-Math.PI/2);
+    const sc = 66 / v.len;
+    g.scale(sc, sc);
+    drawVehicle(g, key, 0);
+    g.restore();
+    const name = document.createElement("div");
+    name.className = "name"; name.textContent = v.name;
+    const goal = document.createElement("div");
+    goal.className = "goal"; goal.textContent = "→ " + v.goalName;
+    b.append(c, name, goal);
+    b.addEventListener("click", ()=>{ audio(); unlockSpeech(); startLevel(key); });
+    picker.appendChild(b);
+  }
+}
+let toastTimer = 0;
+function toast(msg){
+  toastEl.textContent = msg;
+  toastEl.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ toastEl.hidden = true; }, 3000);
+}
+// メニュー(index.html)は公開ページにだけ存在する
+const hosted = !(/claude|anthropic/i.test(location.hostname) || window.self !== window.top);
+homeEl.addEventListener("click", e => {
+  if(!hosted){
+    e.preventDefault();
+    toast("メニューは、こうかいしたページで つかえます");
+  }
+});
+
+voiceEl.addEventListener("click", () => {
+  voiceOn = !voiceOn;
+  voiceEl.textContent = voiceOn ? "🔊 こえ" : "🔇 こえ";
+  if(voiceOn){ unlockSpeech(); say("こえ　オン"); }
+  else if("speechSynthesis" in window){ speechSynthesis.cancel(); }
+});
+
+document.getElementById("again").addEventListener("click", ()=>{ audio(); unlockSpeech(); startLevel(vkey); });
+document.getElementById("other").addEventListener("click", ()=>{ backToSelect(); });
+backEl.addEventListener("click", backToSelect);
+function backToSelect(){
+  mode = "select"; road = null;
+  selectEl.hidden = false; goalEl.hidden = true; backEl.hidden = true; hintEl.hidden = true;
+}
+
+resize();
+buildPicker();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
