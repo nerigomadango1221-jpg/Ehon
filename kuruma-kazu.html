@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>くるまのかずあそび</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body {
+    width:100%; height:100%; overflow:hidden;
+    background:#8fd3f4;
+    font-family: "Hiragino Maru Gothic ProN", "ヒラギノ丸ゴ ProN", "Hiragino Sans", sans-serif;
+    -webkit-user-select:none; user-select:none; touch-action:manipulation;
+  }
+  #stage { position:fixed; inset:0; overflow:hidden; cursor:pointer; }
+
+  /* ---- そら ---- */
+  #sky { position:absolute; left:0; right:0; top:0; height:62%;
+         background:linear-gradient(#7ec8f2 0%, #a8ddf7 55%, #d9f0fb 100%); }
+  .cloud { position:absolute; background:#fff; border-radius:50%; opacity:.9;
+           box-shadow:0 0 0 rgba(0,0,0,0); animation:drift linear infinite; }
+  .cloud::before, .cloud::after { content:""; position:absolute; background:#fff; border-radius:50%; }
+  .cloud::before { width:60%; height:110%; left:8%; top:-45%; }
+  .cloud::after  { width:48%; height:95%; right:8%; top:-30%; }
+  @keyframes drift { from { transform:translateX(-30vw);} to { transform:translateX(120vw);} }
+  .sun { position:absolute; right:7%; top:6%; width:11vh; height:11vh; border-radius:50%;
+         background:radial-gradient(circle at 35% 35%, #fff6b0, #ffd93d 60%, #ffc21a);
+         box-shadow:0 0 6vh rgba(255,214,61,.55); }
+
+  /* ---- まちなみ ---- */
+  #town { position:absolute; left:0; right:0; bottom:38%; height:34%; }
+  #town svg { width:100%; height:100%; display:block; }
+
+  /* ---- どうろ ---- */
+  #road { position:absolute; left:0; right:0; bottom:0; height:38%;
+          background:linear-gradient(#5d6470 0%, #4b515c 18%, #434954 100%); }
+  #walk { position:absolute; left:0; right:0; top:0; height:14%;
+          background:linear-gradient(#c9c6bd, #b4b0a6); border-top:0.5vh solid #e6e3da; }
+  #lines { position:absolute; left:-20%; width:140%; top:66%; height:1.6vh; display:flex; gap:6vw; }
+  #lines i { flex:0 0 9vw; height:100%; background:#f5f1e3; border-radius:1vh; opacity:.85; }
+  #lines.move { animation:slide .9s linear infinite; }
+  @keyframes slide { from { transform:translateX(0);} to { transform:translateX(-15vw);} }
+
+  /* ---- くるま ---- */
+  #carwrap { position:absolute; left:50%; bottom:16%; width:min(46vh, 72vw);
+             transform:translateX(-50%); will-change:transform; }
+  #carwrap svg { width:100%; height:auto; display:block; transform:scaleX(-1);
+                 filter:drop-shadow(0 1.2vh 1vh rgba(0,0,0,.28)); }
+  .wheel { transform-box:fill-box; transform-origin:center; }
+  .rolling .wheel { animation:spin .45s linear infinite; }
+  @keyframes spin { to { transform:rotate(-360deg);} }
+
+  .enter { animation:carIn .95s cubic-bezier(.2,.7,.3,1) both; }
+  @keyframes carIn { from { transform:translateX(-160vw);} to { transform:translateX(-50%);} }
+  .bounce { animation:hop .62s cubic-bezier(.3,.9,.4,1) both; }
+  @keyframes hop {
+    0%   { transform:translateX(-50%) translateY(0) scale(1,1); }
+    18%  { transform:translateX(-50%) translateY(0) scale(1.1,.86); }
+    45%  { transform:translateX(-50%) translateY(-11vh) scale(.94,1.08); }
+    70%  { transform:translateX(-50%) translateY(0) scale(1.1,.88); }
+    85%  { transform:translateX(-50%) translateY(-3vh) scale(1,1); }
+    100% { transform:translateX(-50%) translateY(0) scale(1,1); }
+  }
+  .exit { animation:carOut .8s cubic-bezier(.6,0,.9,.4) both; }
+  @keyframes carOut { from { transform:translateX(-50%);} to { transform:translateX(170vw);} }
+
+  /* ---- かず ---- */
+  #num { position:absolute; left:50%; top:3%; transform:translateX(-50%);
+         font-size:min(19vh, 26vw); line-height:1; font-weight:900; color:#fff;
+         -webkit-text-stroke:0.9vh #ff7a3d; paint-order:stroke fill;
+         text-shadow:0 1vh 0 rgba(0,0,0,.12); opacity:0; }
+  #num.pop { animation:pop .7s cubic-bezier(.2,1.4,.4,1) forwards; }
+  @keyframes pop {
+    0%   { opacity:0; transform:translateX(-50%) scale(.3) rotate(-14deg); }
+    55%  { opacity:1; transform:translateX(-50%) scale(1.18) rotate(5deg); }
+    100% { opacity:1; transform:translateX(-50%) scale(1) rotate(0); }
+  }
+  #dots { position:absolute; left:50%; top:25.5%; transform:translateX(-50%);
+          display:flex; gap:1.1vh; flex-wrap:wrap; justify-content:center;
+          width:74vw; opacity:0; transition:opacity .3s; }
+  #dots i { width:min(2.6vh, 3.4vw); height:min(2.6vh, 3.4vw); border-radius:50%; background:#fff;
+            border:0.45vh solid #ff7a3d; }
+
+  /* ---- なまえ ---- */
+  #name { position:absolute; left:50%; bottom:2.5%; transform:translateX(-50%);
+          background:#fffdf4; color:#3c3a34; border:0.7vh solid #ffd93d;
+          border-radius:99px; padding:1vh min(5vw, 3.5vh); white-space:nowrap;
+          font-size:min(5.4vh, 6.6vw); font-weight:800; letter-spacing:.04em;
+          box-shadow:0 1vh 2vh rgba(0,0,0,.22);
+          opacity:1; transition:opacity .25s; }
+  #name.hide { opacity:0; }
+
+
+  /* ---- タップのヒント ---- */
+  #hint { position:absolute; left:50%; top:42%; transform:translateX(-50%);
+          font-size:min(4.2vh, 5.4vw); font-weight:800; color:#fff; text-shadow:0 .5vh 1vh rgba(0,0,0,.3);
+          animation:blink 1.4s ease-in-out infinite; pointer-events:none; }
+  @keyframes blink { 0%,100%{opacity:.35; transform:translateX(-50%) scale(.96);} 50%{opacity:1; transform:translateX(-50%) scale(1.04);} }
+
+  /* ---- こえ ON/OFF ---- */
+  #voice { position:absolute; right:2vw; top:2vh; width:7vh; height:7vh; border-radius:50%;
+           border:none; background:rgba(255,255,255,.55); font-size:3.4vh; line-height:7vh;
+           text-align:center; color:#3c3a34; }
+  #voice.off { opacity:.45; }
+  #reset { position:absolute; left:2vw; top:2vh; height:7vh; border-radius:99px;
+           border:none; background:rgba(255,255,255,.55); padding:0 3vh;
+           font-family:inherit; font-size:3vh; font-weight:800; color:#3c3a34; }
+  #reset:active { background:rgba(255,255,255,.85); }
+
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="sky">
+    <div class="sun"></div>
+    <div class="cloud" style="width:22vw;height:6vh;top:12%;animation-duration:46s"></div>
+    <div class="cloud" style="width:16vw;height:4.5vh;top:30%;animation-duration:64s;animation-delay:-20s"></div>
+    <div class="cloud" style="width:26vw;height:7vh;top:3%;animation-duration:80s;animation-delay:-50s"></div>
+  </div>
+
+  <div id="town">
+    <svg viewBox="0 0 1200 340" preserveAspectRatio="none" aria-hidden="true">
+      <g fill="#8f9ab5">
+        <rect x="20"  y="120" width="150" height="220" rx="6"/>
+        <rect x="960" y="150" width="200" height="190" rx="6"/>
+      </g>
+      <g fill="#c08a72"><rect x="180" y="200" width="170" height="140" rx="6"/></g>
+      <g fill="#7fa8c9"><rect x="360" y="90"  width="140" height="250" rx="6"/></g>
+      <g fill="#d9a05b"><rect x="520" y="185" width="180" height="155" rx="6"/></g>
+      <g fill="#9ec4a5"><rect x="720" y="130" width="220" height="210" rx="6"/></g>
+      <!-- やね -->
+      <path d="M180 200 L265 140 L350 200 Z" fill="#a85f4c"/>
+      <path d="M520 185 L610 120 L700 185 Z" fill="#b8703f"/>
+      <!-- まど -->
+      <g fill="#fff6d6">
+        <rect x="45"  y="150" width="35" height="40" rx="4"/><rect x="105" y="150" width="35" height="40" rx="4"/>
+        <rect x="45"  y="220" width="35" height="40" rx="4"/><rect x="105" y="220" width="35" height="40" rx="4"/>
+        <rect x="390" y="130" width="35" height="45" rx="4"/><rect x="440" y="130" width="35" height="45" rx="4"/>
+        <rect x="390" y="205" width="35" height="45" rx="4"/><rect x="440" y="205" width="35" height="45" rx="4"/>
+        <rect x="755" y="170" width="45" height="45" rx="5"/><rect x="825" y="170" width="45" height="45" rx="5"/>
+        <rect x="895" y="170" width="45" height="45" rx="5"/>
+        <rect x="990" y="190" width="45" height="45" rx="5"/><rect x="1065" y="190" width="45" height="45" rx="5"/>
+        <rect x="215" y="240" width="45" height="45" rx="5"/><rect x="285" y="240" width="45" height="45" rx="5"/>
+        <rect x="560" y="225" width="45" height="45" rx="5"/><rect x="630" y="225" width="45" height="45" rx="5"/>
+      </g>
+      <!-- き -->
+      <g><rect x="470" y="270" width="18" height="70" fill="#8a5a3b"/>
+         <circle cx="479" cy="255" r="45" fill="#6fbf73"/></g>
+      <g><rect x="930" y="260" width="20" height="80" fill="#8a5a3b"/>
+         <circle cx="940" cy="243" r="52" fill="#5cb267"/></g>
+      <!-- しんごう -->
+      <g><rect x="850" y="230" width="12" height="110" fill="#6b7280"/>
+         <rect x="832" y="196" width="48" height="42" rx="8" fill="#3f4652"/>
+         <circle cx="845" cy="217" r="11" fill="#ff5c5c"/><circle cx="868" cy="217" r="11" fill="#6ee27a"/></g>
+    </svg>
+  </div>
+
+  <div id="road">
+    <div id="walk"></div>
+    <div id="lines"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  </div>
+
+  <div id="num"></div>
+  <div id="dots"></div>
+  <div id="carwrap"></div>
+  <div id="name">しょうぼうしゃ</div>
+  <div id="hint">がめんを タップ してね</div>
+  <button id="voice" aria-label="こえ">🔊</button>
+  <button id="reset" aria-label="さいしょから">↺ はじめから</button>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ============ くるまのデータ ============ */
+  var CARS = [
+    { key:"fire",  name:"しょうぼうしゃ" },
+    { key:"amb",   name:"きゅうきゅうしゃ" },
+    { key:"bus",   name:"バス" },
+    { key:"car",   name:"じどうしゃ" },
+    { key:"gomi",  name:"ごみしゅうしゅうしゃ" }
+  ];
+  var CARS_PER_ROUND = 5; // 消防車→救急車→バス→自動車→ごみ収集車でひとまわり
+
+  /* ============ え（SVG） ============ */
+  function wheels(list) {
+    var s = "";
+    list.forEach(function (w) {
+      s += '<g class="wheel"><circle cx="'+w[0]+'" cy="'+w[1]+'" r="'+w[2]+'" fill="#2b2f36"/>' +
+           '<circle cx="'+w[0]+'" cy="'+w[1]+'" r="'+(w[2]*0.52)+'" fill="#e8eaed"/>' +
+           '<rect x="'+(w[0]-w[2]*0.12)+'" y="'+(w[1]-w[2]*0.5)+'" width="'+(w[2]*0.24)+'" height="'+w[2]+'" fill="#b9bdc4"/>' +
+           '<rect x="'+(w[0]-w[2]*0.5)+'" y="'+(w[1]-w[2]*0.12)+'" width="'+w[2]+'" height="'+(w[2]*0.24)+'" fill="#b9bdc4"/></g>';
+    });
+    return s;
+  }
+  var HEAD = '<svg viewBox="0 0 400 210" xmlns="http://www.w3.org/2000/svg">';
+  var TAIL = '</svg>';
+
+  var ART = {
+    fire: HEAD +
+      '<rect x="24" y="86" width="352" height="74" rx="14" fill="#e23b32"/>' +
+      '<rect x="40" y="46" width="118" height="58" rx="12" fill="#e23b32"/>' +
+      '<rect x="54" y="56" width="88" height="36" rx="7" fill="#bfe6f7"/>' +
+      '<rect x="176" y="60" width="180" height="34" rx="8" fill="#c9ced6"/>' +
+      '<rect x="176" y="70" width="180" height="6" rx="3" fill="#9aa2ae"/>' +
+      '<rect x="205" y="52" width="10" height="46" rx="4" fill="#9aa2ae"/>' +
+      '<rect x="300" y="52" width="10" height="46" rx="4" fill="#9aa2ae"/>' +
+      '<rect x="190" y="104" width="160" height="42" rx="7" fill="#f6f2e8"/>' +
+      '<circle cx="82" cy="34" r="13" fill="#ff5a5a"/><circle cx="118" cy="34" r="13" fill="#ffd93d"/>' +
+      '<rect x="24" y="120" width="352" height="12" fill="#f6f2e8"/>' +
+      '<circle cx="34" cy="104" r="11" fill="#ffe27a"/>' +
+      wheels([[100,160,30],[300,160,30]]) + TAIL,
+
+    amb: HEAD +
+      '<rect x="24" y="80" width="352" height="80" rx="14" fill="#fdfdfd"/>' +
+      '<rect x="24" y="44" width="150" height="46" rx="12" fill="#fdfdfd"/>' +
+      '<rect x="38" y="54" width="110" height="34" rx="7" fill="#bfe6f7"/>' +
+      '<rect x="24" y="118" width="352" height="16" fill="#e23b32"/>' +
+      '<rect x="246" y="60" width="18" height="46" rx="4" fill="#e23b32"/>' +
+      '<rect x="222" y="74" width="66" height="18" rx="4" fill="#e23b32"/>' +
+      '<rect x="180" y="20" width="60" height="26" rx="10" fill="#e23b32"/>' +
+      '<circle cx="196" cy="33" r="7" fill="#ffd0d0"/><circle cx="224" cy="33" r="7" fill="#ffd0d0"/>' +
+      '<rect x="176" y="46" width="68" height="34" rx="6" fill="#e5e8ec"/>' +
+      '<circle cx="34" cy="98" r="11" fill="#ffe27a"/>' +
+      wheels([[100,160,30],[300,160,30]]) + TAIL,
+
+    bus: HEAD +
+      '<rect x="18" y="40" width="364" height="120" rx="20" fill="#ffc21a"/>' +
+      '<rect x="32" y="56" width="92" height="46" rx="8" fill="#bfe6f7"/>' +
+      '<rect x="140" y="56" width="62" height="46" rx="8" fill="#bfe6f7"/>' +
+      '<rect x="216" y="56" width="62" height="46" rx="8" fill="#bfe6f7"/>' +
+      '<rect x="292" y="56" width="74" height="46" rx="8" fill="#bfe6f7"/>' +
+      '<rect x="18" y="116" width="364" height="14" fill="#31b0c9"/>' +
+      '<rect x="196" y="116" width="52" height="44" rx="4" fill="#dfe4ea"/>' +
+      '<circle cx="30" cy="106" r="11" fill="#ffe27a"/>' +
+      wheels([[96,160,30],[304,160,30]]) + TAIL,
+
+    car: HEAD +
+      '<rect x="46" y="100" width="308" height="60" rx="22" fill="#3d8be0"/>' +
+      '<path d="M110 100 L140 54 L272 54 L306 100 Z" fill="#54a0f0"/>' +
+      '<path d="M132 96 L152 66 L192 66 L192 96 Z" fill="#bfe6f7"/>' +
+      '<path d="M208 96 L208 66 L258 66 L282 96 Z" fill="#bfe6f7"/>' +
+      '<rect x="196" y="96" width="8" height="64" fill="#2d6fb8"/>' +
+      '<circle cx="56" cy="118" r="11" fill="#ffe27a"/>' +
+      '<circle cx="344" cy="118" r="10" fill="#ff8c8c"/>' +
+      wheels([[116,160,30],[286,160,30]]) + TAIL,
+
+    gomi: HEAD +
+      '<rect x="120" y="58" width="256" height="102" rx="14" fill="#4aa86a"/>' +
+      '<rect x="24" y="86" width="112" height="74" rx="12" fill="#3f9a5e"/>' +
+      '<rect x="38" y="96" width="82" height="36" rx="7" fill="#bfe6f7"/>' +
+      '<path d="M330 78 L376 78 L376 150 L318 150 Z" fill="#6cc48c"/>' +
+      '<rect x="140" y="74" width="180" height="16" rx="6" fill="#8fd6a8"/>' +
+      '<rect x="140" y="102" width="180" height="46" rx="8" fill="#3f9a5e"/>' +
+      '<rect x="150" y="112" width="160" height="8" rx="4" fill="#8fd6a8"/>' +
+      '<circle cx="34" cy="104" r="11" fill="#ffe27a"/>' +
+      wheels([[92,160,30],[288,160,30]]) + TAIL
+  };
+
+  /* ============ おと（WebAudio） ============ */
+  var actx = null;
+  function audio() {
+    if (!actx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      actx = new AC();
+    }
+    if (actx.state === "suspended") { actx.resume(); }
+    return actx;
+  }
+  function tone(t0, dur, f0, f1, type, vol, filter) {
+    var c = audio(); if (!c) return;
+    var o = c.createOscillator(), g = c.createGain(), node = g;
+    o.type = type || "sawtooth";
+    o.frequency.setValueAtTime(f0, t0);
+    if (f1) o.frequency.linearRampToValueAtTime(f1, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol || 0.2, t0 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g);
+    if (filter) {
+      var lp = c.createBiquadFilter();
+      lp.type = "lowpass"; lp.frequency.value = filter;
+      g.connect(lp); node = lp;
+    }
+    node.connect(c.destination);
+    o.start(t0); o.stop(t0 + dur + 0.05);
+  }
+  var SOUND = {
+    fire: function (t) {                       // ウーーー ＋ カンカン
+      tone(t,      0.55, 520, 820, "sawtooth", 0.16, 1400);
+      tone(t+0.55, 0.55, 820, 520, "sawtooth", 0.16, 1400);
+      [0.1, 0.45, 0.8].forEach(function (d) { tone(t+d, 0.12, 1500, 1500, "triangle", 0.12); });
+    },
+    amb: function (t) {                        // ピーポーピーポー
+      for (var i = 0; i < 4; i++) {
+        tone(t + i*0.3, 0.26, i % 2 ? 780 : 960, null, "square", 0.1, 2200);
+      }
+    },
+    bus: function (t) {                        // プァーン
+      tone(t, 0.75, 155, 150, "sawtooth", 0.2, 900);
+      tone(t, 0.75, 232, 226, "sawtooth", 0.12, 900);
+    },
+    car: function (t) {                        // ブッ ブーッ
+      tone(t,      0.18, 330, null, "square", 0.16, 1200);
+      tone(t+0.28, 0.34, 330, null, "square", 0.16, 1200);
+    },
+    gomi: function (t) {                       // ピンポンパン ＋ シュー
+      [523, 659, 784, 659].forEach(function (f, i) {
+        tone(t + i*0.22, 0.3, f, null, "triangle", 0.17);
+      });
+      tone(t + 0.9, 0.5, 90, 60, "sawtooth", 0.12, 400);
+    },
+    depart: function (t) {                     // ブーブー ＋ 走り去るエンジン音
+      tone(t,      0.2,  300, null, "square",   0.15, 1100);
+      tone(t+0.3,  0.34, 300, null, "square",   0.15, 1100);
+      tone(t+0.62, 0.9,  120, 300, "sawtooth",  0.14, 800);
+    }
+  };
+
+  /* ============ こえ ============ */
+  var voiceOn = true, speechReady = false, jaVoice = null;
+
+  function pickVoice() {
+    if (!window.speechSynthesis) return null;
+    var vs = window.speechSynthesis.getVoices() || [];
+    for (var i = 0; i < vs.length; i++) {
+      if ((vs[i].lang || "").toLowerCase().indexOf("ja") === 0) return vs[i];
+    }
+    return null;
+  }
+  if (window.speechSynthesis) {
+    jaVoice = pickVoice();
+    window.speechSynthesis.onvoiceschanged = function () { jaVoice = pickVoice(); };
+  }
+
+  /* iOSは「タップと同じ処理の中」で1回目を始めないと読み上げが止められる */
+  function unlockSpeech() {
+    if (speechReady || !window.speechSynthesis) return;
+    try {
+      var u = new SpeechSynthesisUtterance("　");
+      u.volume = 0; u.lang = "ja-JP";
+      if (jaVoice) u.voice = jaVoice;
+      window.speechSynthesis.speak(u);
+      speechReady = true;
+    } catch (e) {}
+  }
+
+  function speak(text) {
+    if (!voiceOn || !window.speechSynthesis) return;
+    try {
+      if (window.speechSynthesis.speaking) window.speechSynthesis.cancel();
+      if (!jaVoice) jaVoice = pickVoice();
+      var u = new SpeechSynthesisUtterance(text);
+      u.lang = "ja-JP"; u.rate = 0.85; u.pitch = 1.25;
+      if (jaVoice) u.voice = jaVoice;
+      window.speechSynthesis.speak(u);
+    } catch (e) {}
+  }
+
+  /* ============ うごき ============ */
+  var stage  = document.getElementById("stage");
+  var wrap   = document.getElementById("carwrap");
+  var numEl  = document.getElementById("num");
+  var dotsEl = document.getElementById("dots");
+  var nameEl = document.getElementById("name");
+  var hint   = document.getElementById("hint");
+  var lines  = document.getElementById("lines");
+  var vbtn   = document.getElementById("voice");
+  var rbtn   = document.getElementById("reset");
+
+  var idx = 0, count = 0, busy = false, started = false, numberUp = false;
+
+  function show(i) {
+    var c = CARS[i];
+    wrap.innerHTML = ART[c.key];
+    nameEl.textContent = c.name;
+    nameEl.classList.remove("hide");
+    wrap.className = "enter rolling";
+    lines.classList.add("move");
+    setTimeout(function () {
+      wrap.classList.remove("rolling");
+      lines.classList.remove("move");
+    }, 950);
+  }
+
+  function setDots(n) {
+    if (n > 12) { dotsEl.innerHTML = ""; dotsEl.style.opacity = 0; return; }
+    var s = "";
+    for (var i = 0; i < n; i++) s += "<i></i>";
+    dotsEl.innerHTML = s;
+    dotsEl.style.opacity = 1;
+  }
+
+  function clearNumber() {
+    numEl.classList.remove("pop");
+    numEl.style.opacity = 0;
+    dotsEl.style.opacity = 0;
+  }
+
+  /* 1回目のタップ：ぴょんと跳ねて、数字とサイレン／エンジン音 */
+  function popNumber() {
+    var car = CARS[idx];
+    var c = audio();
+    if (c) SOUND[car.key](c.currentTime + 0.02);
+
+    count += 1;
+    numEl.textContent = count;
+    numEl.style.fontSize = count < 100 ? "min(19vh, 26vw)"
+                         : (count < 1000 ? "min(14vh, 20vw)" : "min(11vh, 16vw)");
+    numEl.style.opacity = 1;
+    numEl.classList.remove("pop"); void numEl.offsetWidth; numEl.classList.add("pop");
+    setDots(count);
+    setTimeout(function () { speak(count + "。" + car.name); }, 500);
+
+    wrap.className = "bounce";
+    numberUp = true;
+    busy = true;
+    setTimeout(function () { busy = false; }, 660);
+  }
+
+  /* 2回目のタップ：ブーブーと走り去って、次の車が登場 */
+  function driveAway() {
+    var c = audio();
+    if (c) SOUND.depart(c.currentTime + 0.02);
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+
+    busy = true;
+    numberUp = false;
+    clearNumber();
+    nameEl.classList.add("hide");
+    wrap.className = "exit rolling";
+    lines.classList.add("move");
+
+    setTimeout(function () {
+      idx = (idx + 1) % CARS.length;   // 全種類まわったら最初の車へ
+      show(idx);
+      busy = false;
+    }, 860);
+  }
+
+  function tap() {
+    unlockSpeech();          // タップと同じ処理の中で読み上げを解禁する
+    if (busy) return;
+    if (!started) { started = true; hint.style.display = "none"; }
+    if (numberUp) { driveAway(); } else { popNumber(); }
+  }
+
+  function reset() {
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    busy = false; numberUp = false;
+    idx = 0; count = 0;
+    clearNumber();
+    show(0);
+  }
+
+  stage.addEventListener("pointerdown", function (e) {
+    if (e.target === vbtn || e.target === rbtn) return;
+    tap();
+  });
+  vbtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    voiceOn = !voiceOn;
+    if (voiceOn) { unlockSpeech(); speak("こえ　オン"); }
+    vbtn.textContent = voiceOn ? "🔊" : "🔇";
+    vbtn.classList.toggle("off", !voiceOn);
+    if (!voiceOn && window.speechSynthesis) window.speechSynthesis.cancel();
+  });
+  rbtn.addEventListener("click", function (e) { e.stopPropagation(); reset(); });
+  document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+
+  show(0);
+})();
+</script>
+</body>
+</html>
